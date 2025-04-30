@@ -218,8 +218,12 @@ elif selected_option == "Internship Offer":
             )
             start_date = st.date_input("Start Date")
             end_date = st.date_input("End Date")
-            stipend = st.text_input("Stipend (if any)")
-            stipend = "{:,.2f}".format(int(stipend))
+            stipend = st.text_input("Stipend (write out digits, no commas or dot)")
+            # stipend = "{:,.2f}".format(int(stipend))
+            if stipend_input.strip().isdigit():
+                stipend = "{:,.2f}".format(int(stipend_input))
+            else:
+                stipend = "0.00"
             hours = st.text_input("Work Hours per week")
             duration = st.number_input("Internship Duration (In Months)", min_value=1, max_value=24, step=1)
             first_paycheck = st.date_input("First Paycheck Date")
