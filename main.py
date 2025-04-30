@@ -218,7 +218,7 @@ elif selected_option == "Internship Offer":
             )
             start_date = st.date_input("Start Date")
             end_date = st.date_input("End Date")
-            stipend = st.text_input("Stipend (write out digits, no commas or dot)")
+            stipend_input = st.text_input("Stipend (write out digits, no commas or dot)")
             # stipend = "{:,.2f}".format(int(stipend))
             if stipend_input.strip().isdigit():
                 stipend = "{:,.2f}".format(int(stipend_input))
