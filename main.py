@@ -9,7 +9,7 @@ from firebase_conf import auth, rt_db, bucket, firestore_db
 
 load_dotenv()
 
-LOAD_LOCALLY = True
+LOAD_LOCALLY = False
 
 # Initialize session state
 if 'user' not in st.session_state:
