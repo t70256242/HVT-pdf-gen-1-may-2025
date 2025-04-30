@@ -23,3 +23,5 @@ pytz>=2022.1
 # Optional (if needed for your firebase_config)
 google-auth>=2.0.0
 google-cloud-firestore>=2.0.0
+
+setuptools>=68.0.0
