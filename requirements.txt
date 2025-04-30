@@ -1,0 +1,5 @@
+streamlit==1.12.0
+altair==4.2.2
+pdfkit==1.0.0
+wkhtmltopdf==0.2
+pdfplumber==0.11.6
