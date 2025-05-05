@@ -1,11 +1,12 @@
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit as st
 from dotenv import load_dotenv
-from internship_template_edit import fill_pdf_template
-from internship_docx_edit import replace_docx_placeholders
 from firebase_conf import auth, rt_db, bucket, firestore_db
+from document_handlers import handle_internship_offer, handle_nda, handle_contract, handle_proposal
+from google.cloud import firestore
+from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 
 load_dotenv()
 
@@ -17,13 +18,11 @@ if 'user' not in st.session_state:
 if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
 
-
 def logout():
     st.session_state.user = None
     st.session_state.is_admin = False
     st.sidebar.success("Logged out successfully!")
     st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-
 
 def admin_login(email, password):
     try:
@@ -41,7 +40,6 @@ def admin_login(email, password):
     except Exception as e:
         st.error(f"Login failed: {str(e)}")
         return False
-
 
 # Document types
 DOCUMENT_TYPES = [
@@ -77,8 +75,6 @@ if selected_option == "Admin Panel":
                     st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
     else:
         # Admin dashboard
-        #
-        # Admin dashboard
         st.success(f"Welcome Admin! ({st.session_state.user['email']})")
 
         # Admin panel content
@@ -100,220 +96,219 @@ if selected_option == "Admin Panel":
             )
 
             if uploaded_file:
-                # Save to database/storage
-                file_details = {
-                    "name": uploaded_file.name,
-                    "type": doc_type,
-                    "size": f"{len(uploaded_file.getvalue()) / 1024:.1f} KB",
-                    "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M")
-                }
+                # Additional fields for all templates
+                with st.form("template_details_form"):
+                    visibility = st.radio(
+                        "Visibility",
+                        ["Public", "Private"],
+                        help="Public templates can be accessed by all users"
+                    )
 
-                if st.button("Save Template"):
-                    # Add your save logic here (Firebase/DB)
-                    st.session_state.templates[doc_type] = file_details
-                    st.success(f"{doc_type} template saved successfully!")
+                    description = st.text_area("Template Description")
 
-        st.subheader("📋 Current Templates")
+                    # Additional field for Proposal
+                    if doc_type == "Proposal":
+                        proposal_subdir = st.selectbox(
+                            "Proposal Template Category",
+                            ["Cover Templates", "Index Templates", "Rest of Proposal Templates"],
+                            help="Choose which part of the proposal this template belongs to"
+                        )
+
+                        subdir_map = {
+                            "Cover Templates": "cover_templates",
+                            "Index Templates": "index_templates",
+                            "Rest of Proposal Templates": "rest_of_proposal_templates"
+                        }
+                        normalized_subdir = subdir_map[proposal_subdir]
+
+                    if st.form_submit_button("Save Template"):
+                        try:
+                            # Generate standardized filename
+                            template_ref = firestore_db.collection("hvt_generator").document(doc_type)
+                            count = len([doc.id for doc in template_ref.collection("templates").get()])
+                            order_number = count + 1
+                            file_extension = uploaded_file.name.split('.')[-1]
+                            new_filename = f"template{order_number}.{file_extension}"
+
+                            # Define storage paths
+                            if doc_type == "Proposal":
+                                storage_path = f"hvt_generator/proposal/{normalized_subdir}/{new_filename}"
+                            else:
+                                storage_path = f"hvt_generator/{doc_type.lower().replace(' ', '_')}/{new_filename}"
+
+                            # Upload to Firebase Storage
+                            blob = bucket.blob(storage_path)
+                            blob.upload_from_string(
+                                uploaded_file.getvalue(),
+                                content_type=uploaded_file.type
+                            )
+
+                            # Generate download URL
+                            download_url = blob.generate_signed_url(
+                                expiration=datetime.timedelta(days=365 * 10),  # 10 year expiration
+                                version="v4"
+                            ) if visibility == "Private" else blob.public_url
+
+                            # Prepare metadata
+                            file_details = {
+                                "name": new_filename,
+                                "original_name": uploaded_file.name,
+                                "doc_type": doc_type,
+                                "file_type": uploaded_file.type,
+                                "size_kb": f"{len(uploaded_file.getvalue()) / 1024:.1f}",
+                                "size_bytes": len(uploaded_file.getvalue()),
+                                "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "upload_timestamp": firestore.SERVER_TIMESTAMP,
+                                "download_url": download_url,
+                                "storage_path": storage_path,
+                                "visibility": visibility,
+                                "description": description,
+                                "order_number": order_number,
+                                "is_active": True
+                            }
+
+                            # Add proposal-specific fields if needed
+                            if doc_type == "Proposal":
+                                file_details["template_part"] = proposal_subdir
+                                file_details["proposal_section_type"] = normalized_subdir.split('_')[0].capitalize()
+
+                            # Save to Firestore
+                            template_ref.collection("templates").add(file_details)
+
+                            # Update the document count
+                            template_ref.set({
+                                "template_count": order_number,
+                                "last_updated": firestore.SERVER_TIMESTAMP
+                            }, merge=True)
+
+                            st.success(f"Template saved successfully as {new_filename}!")
+                            st.markdown(f"**Download Link:** [Click here]({download_url})")
+
+                        except Exception as e:
+                            st.error(f"Error saving template: {str(e)}")
+                            st.exception(e)
 
         # Template management in tabs
-        tab1, tab2, tab3, tab4 = st.tabs(
-            ["Internship Offer", "NDA", "Contract", "Proposal"]
-        )
+        from streamlit_sortables import sort_items
 
 
-        def show_template_tab(doc_type):
-            """Reusable function for template tabs"""
-            if doc_type in st.session_state.templates:
-                template = st.session_state.templates[doc_type]
+        # --- Fetch templates from Firestore ---
+        def fetch_templates(doc_type):
+            templates_ref = firestore_db.collection("hvt_generator").document(doc_type).collection("templates")
+            docs = templates_ref.order_by("order_number").get()
+            templates = [doc.to_dict() | {"id": doc.id} for doc in docs]
+            return templates
 
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f"""
-                    **File Name**: {template['name']}  
-                    **Type**: {template['type']}  
-                    **Size**: {template['size']}  
-                    **Uploaded**: {template['upload_date']}
-                    """)
 
-                    # Preview section
-                    with st.expander("🔍 Preview"):
-                        if template['name'].endswith('.pdf'):
-                            st.pdf(uploaded_file)
-                        else:
-                            st.warning("DOCX preview requires conversion to PDF")
+        # --- Render a template card ---
+        def render_template_card(template):
+            st.markdown(f"**{template['original_name']}**")
+            st.write(f"""
+            **Type:** {template['file_type']}  
+            **Size:** {template['size_kb']} KB  
+            **Visibility:** {template['visibility']}  
+            **Uploaded:** {template['upload_date']}
+            """)
 
-                with col2:
-                    st.button(
-                        "🗑️ Delete",
-                        key=f"delete_{doc_type}",
-                        on_click=lambda: st.session_state.templates.pop(doc_type)
-                    )
-                    st.button(
-                        "⬆️ Set as Default",
-                        key=f"default_{doc_type}"
-                    )
+            with st.expander("🔍 Preview"):
+                if template['file_type'] == "application/pdf":
+                    st.pdf(template['download_url'])
+                else:
+                    st.info("DOCX preview not supported in-browser")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🗑️ Delete", key=f"delete_{template['id']}"):
+                    firestore_db.collection("hvt_generator").document(template["doc_type"]) \
+                        .collection("templates").document(template["id"]).delete()
+                    st.success("Deleted successfully")
+                    st.experimental_rerun()
+            with col2:
+                if st.button("⭐ Set as Default", key=f"default_{template['id']}"):
+                    # Optional logic to manage 'is_default' field
+                    st.success("Set as default")
+
+
+        # --- Render templates per tab ---
+        def show_templates_tab(doc_type):
+            templates = fetch_templates(doc_type)
+
+            if not templates:
+                st.info(f"No templates found for {doc_type}")
+                return
+
+            if doc_type == "Proposal":
+                # Group by section (template_part)
+                grouped = {}
+                for tpl in templates:
+                    part = tpl.get("template_part", "Section Template")
+                    grouped.setdefault(part, []).append(tpl)
+
+                for section, tpl_list in grouped.items():
+                    st.subheader(f"📄 {section}")
+                    names = [tpl['name'] for tpl in tpl_list]
+                    sorted_names = sort_items(names, direction="vertical")
+                    sorted_tpls = sorted(tpl_list, key=lambda t: sorted_names.index(t["name"]))
+
+                    for tpl in sorted_tpls:
+                        render_template_card(tpl)
+
+                    for idx, tpl in enumerate(sorted_tpls, start=1):
+                        firestore_db.collection("hvt_generator").document(doc_type) \
+                            .collection("templates").document(tpl["id"]).update({"order_number": idx})
             else:
-                st.warning(f"No {doc_type} template uploaded yet")
+                names = [tpl['name'] for tpl in templates]
+                sorted_names = sort_items(names, direction="vertical")
+                sorted_tpls = sorted(templates, key=lambda t: sorted_names.index(t["name"]))
+
+                for tpl in sorted_tpls:
+                    render_template_card(tpl)
+
+                for idx, tpl in enumerate(sorted_tpls, start=1):
+                    firestore_db.collection("hvt_generator").document(doc_type) \
+                        .collection("templates").document(tpl["id"]).update({"order_number": idx})
 
 
-        # Initialize session state for templates if not exists
-        if 'templates' not in st.session_state:
-            st.session_state.templates = {}
-
-        # Show all tabs
+        # --- Tabs for each template type ---
+        tab1, tab2, tab3, tab4 = st.tabs(["Internship Offer", "NDA", "Contract", "Proposal"])
         with tab1:
-            show_template_tab("Internship Offer")
-
+            show_templates_tab("Internship Offer")
         with tab2:
-            show_template_tab("NDA")
-
+            show_templates_tab("NDA")
         with tab3:
-            show_template_tab("Contract")
-
+            show_templates_tab("Contract")
         with tab4:
-            show_template_tab("Proposal")
+            show_templates_tab("Proposal")
 
         # Template statistics
         st.subheader("📊 Template Statistics")
+
         col1, col2, col3 = st.columns(3)
-        col1.metric("Total Templates", len(st.session_state.templates))
+        # Optional: Fetch total template count across all types
+        doc_types = ["Internship Offer", "NDA", "Contract", "Proposal"]
+        all_templates = []
+        for dt in doc_types:
+            all_templates.extend(fetch_templates(dt))
+
+        col1.metric("Total Templates", len(all_templates))
         col2.metric("Most Recent", max(
-            [t['upload_date'] for t in st.session_state.templates.values()],
+            [tpl['upload_date'] for tpl in all_templates],
             default="N/A"
         ))
         col3.metric("Largest Template", max(
-            [t['size'] for t in st.session_state.templates.values()],
+            [tpl['size_kb'] for tpl in all_templates],
             default="N/A"
         ))
 
-        # Bulk actions
-        with st.expander("⚙️ Bulk Actions"):
-            st.download_button(
-                "📥 Export All Templates",
-                data=str(st.session_state.templates),
-                file_name="templates_backup.json"
-            )
-            st.button(
-                "🔄 Refresh All Templates",
-                help="Reload templates from database"
-            )
-
-# Internship Offer form
+# Handle document types
 elif selected_option == "Internship Offer":
-    st.title("📄 Internship Offer Form")
+    handle_internship_offer()
 
-    # Initialize session state for multi-page form
-    if 'form_step' not in st.session_state:
-        st.session_state.form_step = 1
-        st.session_state.offer_data = {}
+elif selected_option == "NDA":
+    handle_nda()
 
-    if st.session_state.form_step == 1:
-        # Step 1: Collect information
-        with st.form("internship_offer_form"):
-            name = st.text_input("Candidate Name")
-            position = st.selectbox(
-                "Internship Position",
-                ["UI UX Designer", "AI Automations Developer", "Sales and Marketing"],
-                index=0
-            )
-            start_date = st.date_input("Start Date")
-            end_date = st.date_input("End Date")
-            stipend_input = st.text_input("Stipend (write out digits, no commas or dot)")
-            # stipend = "{:,.2f}".format(int(stipend))
-            if stipend_input.strip().isdigit():
-                stipend = "{:,.2f}".format(int(stipend_input))
-            else:
-                stipend = "0.00"
-            hours = st.text_input("Work Hours per week")
-            duration = st.number_input("Internship Duration (In Months)", min_value=1, max_value=24, step=1)
-            first_paycheck = st.date_input("First Paycheck Date")
+elif selected_option == "Contract":
+    handle_contract()
 
-            if st.form_submit_button("Generate Offer"):
-                st.session_state.offer_data = {
-                    "name": name,
-                    "position": position,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "stipend": stipend,
-                    "hours": hours,
-                    "duration": duration,
-                    "first_paycheck": first_paycheck
-                }
-                st.session_state.form_step = 2
-                st.experimental_rerun()
-
-    elif st.session_state.form_step == 2:
-        # Step 2: Preview and download
-        st.success("Offer generated successfully!")
-        st.button("← Back to Form", on_click=lambda: setattr(st.session_state, 'form_step', 1))
-
-        # Generate documents
-        replacements_pdf = {
-            "an _Position_": st.session_state.offer_data["position"],
-            "_Date_": st.session_state.offer_data["start_date"].strftime("%B %d, %Y"),
-            "_Name_,": st.session_state.offer_data["name"] + ",",
-            "_Stipend_/": st.session_state.offer_data["stipend"],
-            "_Hrs_": st.session_state.offer_data["hours"],
-            "_Internship_Duration_ months,": f"{st.session_state.offer_data['duration']} months,",
-            "_First_Pay_Cheque_Date": st.session_state.offer_data["first_paycheck"].strftime("%B %d, %Y")
-        }
-
-        replacements_docx = {
-            "_Date_": replacements_pdf["_Date_"],
-            "_Name_": st.session_state.offer_data["name"],
-            "_Position_": st.session_state.offer_data["position"],
-            "_Stipend_": str(st.session_state.offer_data["stipend"]),
-            "_Hrs_": str(st.session_state.offer_data["hours"]),
-            "_Internship_Duration_": str(st.session_state.offer_data["duration"]),
-            "_First_Pay_Cheque_Date": replacements_pdf["_First_Pay_Cheque_Date"]
-        }
-
-        # Generate temporary files
-        pdf_output = "temp_offer.pdf"
-        docx_output = "temp_offer.docx"
-
-        fill_pdf_template("Internship Offer Letter Template.pdf", pdf_output, replacements_pdf, 11)
-        replace_docx_placeholders("Internship Offer Letter Template.docx", docx_output, replacements_docx)
-
-        # Preview section
-        st.subheader("Preview")
-        st.write(f"**Candidate Name:** {st.session_state.offer_data['name']}")
-        st.write(f"**Position:** {st.session_state.offer_data['position']}")
-        st.write(f"**Duration:** {st.session_state.offer_data['duration']} months")
-        st.write(f"**Stipend:** ₹{st.session_state.offer_data['stipend']}/month")
-
-        # PDF preview (requires pdfplumber)
-        try:
-            import pdfplumber
-
-            with pdfplumber.open(pdf_output) as pdf:
-                preview_page = pdf.pages[0]
-                st.image(preview_page.to_image(resolution=150).original, caption="PDF Preview")
-        except:
-            st.warning("Couldn't generate PDF preview. Install pdfplumber for previews.")
-
-        # Download buttons
-        st.subheader("Download Documents")
-        col1, col2 = st.columns(2)
-        with open(pdf_output, "rb") as f_pdf, open(docx_output, "rb") as f_docx:
-            with col1:
-                st.download_button(
-                    "⬇️ Download PDF",
-                    f_pdf,
-                    file_name=f"Offer_{st.session_state.offer_data['name']}.pdf",
-                    mime="application/pdf"
-                )
-            with col2:
-                st.download_button(
-                    "⬇️ Download DOCX",
-                    f_docx,
-                    file_name=f"Offer_{st.session_state.offer_data['name']}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-
-        # Clean up temp files
-        try:
-            os.remove(pdf_output)
-            os.remove(docx_output)
-        except:
-            pass
+elif selected_option == "Proposal":
+    handle_proposal()
