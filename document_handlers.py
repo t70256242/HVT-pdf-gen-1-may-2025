@@ -9,7 +9,7 @@ from nda_edit import nda_edit
 from docx_pdf_converter import main_converter
 from edit_proposal_cover import EditTextFile
 
-LOAD_LOCALLY = False
+LOAD_LOCALLY = True
 
 
 def handle_internship_offer():
