@@ -7,10 +7,12 @@ from firebase_conf import auth, rt_db, bucket, firestore_db
 from document_handlers import handle_internship_offer, handle_nda, handle_contract, handle_proposal
 from google.cloud import firestore
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+import tempfile
+import pdfplumber
 
 load_dotenv()
 
-LOAD_LOCALLY = False
+LOAD_LOCALLY = True
 
 # Initialize session state
 if 'user' not in st.session_state:
@@ -18,11 +20,13 @@ if 'user' not in st.session_state:
 if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
 
+
 def logout():
     st.session_state.user = None
     st.session_state.is_admin = False
     st.sidebar.success("Logged out successfully!")
     st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
 
 def admin_login(email, password):
     try:
@@ -40,6 +44,7 @@ def admin_login(email, password):
     except Exception as e:
         st.error(f"Login failed: {str(e)}")
         return False
+
 
 # Document types
 DOCUMENT_TYPES = [
@@ -110,14 +115,18 @@ if selected_option == "Admin Panel":
                     if doc_type == "Proposal":
                         proposal_subdir = st.selectbox(
                             "Proposal Template Category",
-                            ["Cover Templates", "Index Templates", "Rest of Proposal Templates"],
+                            ["Cover Templates", "Index Templates", "Page 3 to Page 6", "Business Requirements Templates",
+                             "Page 14 optional", "Content Templates"],
                             help="Choose which part of the proposal this template belongs to"
                         )
 
                         subdir_map = {
                             "Cover Templates": "cover_templates",
                             "Index Templates": "index_templates",
-                            "Rest of Proposal Templates": "rest_of_proposal_templates"
+                            "Page 3 to Page 6": "p3_to_p6_templates",
+                            "Business Requirements Templates": "br_templates",
+                            "Page 14 optional": "p_14_templates",
+                            "Content Templates": "content_templates"
                         }
                         normalized_subdir = subdir_map[proposal_subdir]
 
@@ -191,114 +200,199 @@ if selected_option == "Admin Panel":
         # Template management in tabs
         from streamlit_sortables import sort_items
 
-
-        # --- Fetch templates from Firestore ---
-        def fetch_templates(doc_type):
-            templates_ref = firestore_db.collection("hvt_generator").document(doc_type).collection("templates")
-            docs = templates_ref.order_by("order_number").get()
-            templates = [doc.to_dict() | {"id": doc.id} for doc in docs]
-            return templates
+        import streamlit as st
+        import pdfplumber
 
 
-        # --- Render a template card ---
-        def render_template_card(template):
-            st.markdown(f"**{template['original_name']}**")
-            st.write(f"""
-            **Type:** {template['file_type']}  
-            **Size:** {template['size_kb']} KB  
-            **Visibility:** {template['visibility']}  
-            **Uploaded:** {template['upload_date']}
-            """)
+        def preview_pdf_all_pages(pdf_path: str):
+            """
+            Displays all pages of a PDF file as images in Streamlit.
 
-            with st.expander("🔍 Preview"):
-                if template['file_type'] == "application/pdf":
-                    st.pdf(template['download_url'])
-                else:
-                    st.info("DOCX preview not supported in-browser")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🗑️ Delete", key=f"delete_{template['id']}"):
-                    firestore_db.collection("hvt_generator").document(template["doc_type"]) \
-                        .collection("templates").document(template["id"]).delete()
-                    st.success("Deleted successfully")
-                    st.experimental_rerun()
-            with col2:
-                if st.button("⭐ Set as Default", key=f"default_{template['id']}"):
-                    # Optional logic to manage 'is_default' field
-                    st.success("Set as default")
+            Args:
+                pdf_path (str): Path to the PDF file to preview.
+            """
+            try:
+                with pdfplumber.open(pdf_path) as pdf:
+                    for i, page in enumerate(pdf.pages):
+                        preview_image = page.to_image(resolution=100)
+                        st.image(
+                            preview_image.original,
+                            caption=f"Page {i + 1}",
+                            use_column_width=True
+                        )
+            except Exception as e:
+                st.warning(f"Could not preview PDF: {str(e)}")
 
 
-        # --- Render templates per tab ---
         def show_templates_tab(doc_type):
-            templates = fetch_templates(doc_type)
+            st.subheader(f"{doc_type} Templates")
+
+            # Reference to Firestore collection
+            template_ref = firestore_db.collection("hvt_generator").document(doc_type)
+            templates = template_ref.collection("templates").order_by("order_number").get()
 
             if not templates:
                 st.info(f"No templates found for {doc_type}")
                 return
 
             if doc_type == "Proposal":
-                # Group by section (template_part)
-                grouped = {}
-                for tpl in templates:
-                    part = tpl.get("template_part", "Section Template")
-                    grouped.setdefault(part, []).append(tpl)
+                # Group proposal templates by template_part
+                grouped_templates = {}
+                for template_doc in templates:
+                    template_data = template_doc.to_dict()
+                    section = template_data.get("template_part", "Uncategorized")
+                    grouped_templates.setdefault(section, []).append((template_doc.id, template_data))
 
-                for section, tpl_list in grouped.items():
-                    st.subheader(f"📄 {section}")
-                    names = [tpl['name'] for tpl in tpl_list]
-                    sorted_names = sort_items(names, direction="vertical")
-                    sorted_tpls = sorted(tpl_list, key=lambda t: sorted_names.index(t["name"]))
+                for section, templates_in_section in grouped_templates.items():
+                    st.markdown(f"### {section}")
 
-                    for tpl in sorted_tpls:
-                        render_template_card(tpl)
+                    for doc_id, template_data in templates_in_section:
+                        with st.expander(
+                                f"📝 {template_data['original_name']} (Order: {template_data['order_number']})"):
+                            st.write(f"**Description:** {template_data.get('description', '-')}")
+                            st.write(f"**Visibility:** {template_data.get('visibility', '-')}")
+                            st.write(f"**Upload Date:** {template_data.get('upload_date', '-')}")
+                            st.write(f"**File Type:** {template_data.get('file_type', '-')}")
+                            st.write(f"**Size:** {template_data.get('size_kb', '-')} KB")
+                            st.markdown(f"[Download Template]({template_data['download_url']})")
 
-                    for idx, tpl in enumerate(sorted_tpls, start=1):
-                        firestore_db.collection("hvt_generator").document(doc_type) \
-                            .collection("templates").document(tpl["id"]).update({"order_number": idx})
+                            # Preview using your function if PDF + Public
+                            if template_data['file_type'] == 'application/pdf' and template_data[
+                                'visibility'] == 'Public':
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                                    blob = bucket.blob(template_data['storage_path'])
+                                    blob.download_to_filename(tmp_file.name)
+                                    preview_pdf_all_pages(tmp_file.name)
+                                    # preview_pdf_all_pages_grid(tmp_file.name, columns=3, width=220)
+                                    # preview_pdf_all_pages_grid_with_zoom_overlay(tmp_file.name, columns=3)
+
+                            col1, col2, col3, col4 = st.columns(4)
+
+                            with col1:
+                                if st.button(f"🔼 Move Up", key=f"move_up_{doc_id}"):
+                                    current_order = template_data['order_number']
+                                    higher_templates = [t for t in templates_in_section if
+                                                        t[1]['order_number'] < current_order]
+                                    if higher_templates:
+                                        nearest = max(higher_templates, key=lambda t: t[1]['order_number'])
+                                        template_ref.collection("templates").document(doc_id).update(
+                                            {"order_number": nearest[1]['order_number']})
+                                        template_ref.collection("templates").document(nearest[0]).update(
+                                            {"order_number": current_order})
+                                        st.experimental_rerun()
+
+                            with col2:
+                                if st.button(f"🔽 Move Down", key=f"move_down_{doc_id}"):
+                                    current_order = template_data['order_number']
+                                    lower_templates = [t for t in templates_in_section if
+                                                       t[1]['order_number'] > current_order]
+                                    if lower_templates:
+                                        nearest = min(lower_templates, key=lambda t: t[1]['order_number'])
+                                        template_ref.collection("templates").document(doc_id).update(
+                                            {"order_number": nearest[1]['order_number']})
+                                        template_ref.collection("templates").document(nearest[0]).update(
+                                            {"order_number": current_order})
+                                        st.experimental_rerun()
+
+                            with col3:
+                                new_visibility = "Private" if template_data['visibility'] == "Public" else "Public"
+                                if st.button(f"👁️ Toggle to {new_visibility}", key=f"toggle_vis_{doc_id}"):
+                                    # Update the visibility in Firestore
+                                    template_ref.collection("templates").document(doc_id).update(
+                                        {"visibility": new_visibility})
+                                    st.success(f"Visibility changed to {new_visibility}.")
+                                    st.experimental_rerun()
+
+                            with col4:
+                                if st.button(f"🗑️ Delete", key=f"delete_{doc_id}"):
+                                    try:
+                                        blob = bucket.blob(template_data['storage_path'])
+                                        blob.delete()
+                                        template_ref.collection("templates").document(doc_id).delete()
+                                        st.success(f"Template {template_data['original_name']} deleted successfully.")
+                                        st.experimental_rerun()
+                                    except Exception as e:
+                                        st.error(f"Error deleting template: {str(e)}")
+
             else:
-                names = [tpl['name'] for tpl in templates]
-                sorted_names = sort_items(names, direction="vertical")
-                sorted_tpls = sorted(templates, key=lambda t: sorted_names.index(t["name"]))
+                for template_doc in templates:
+                    template_data = template_doc.to_dict()
+                    doc_id = template_doc.id
 
-                for tpl in sorted_tpls:
-                    render_template_card(tpl)
+                    with st.expander(f"📝 {template_data['original_name']} (Order: {template_data['order_number']})"):
+                        st.write(f"**Description:** {template_data.get('description', '-')}")
+                        st.write(f"**Visibility:** {template_data.get('visibility', '-')}")
+                        st.write(f"**Upload Date:** {template_data.get('upload_date', '-')}")
+                        st.write(f"**File Type:** {template_data.get('file_type', '-')}")
+                        st.write(f"**Size:** {template_data.get('size_kb', '-')} KB")
+                        st.markdown(f"[Download Template]({template_data['download_url']})")
 
-                for idx, tpl in enumerate(sorted_tpls, start=1):
-                    firestore_db.collection("hvt_generator").document(doc_type) \
-                        .collection("templates").document(tpl["id"]).update({"order_number": idx})
+                        if template_data['file_type'] == 'application/pdf' and template_data['visibility'] == 'Public':
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                                blob = bucket.blob(template_data['storage_path'])
+                                blob.download_to_filename(tmp_file.name)
+                                preview_pdf_all_pages(tmp_file.name)
+
+                        col1, col2, col3, col4 = st.columns(4)
+
+                        with col1:
+                            if st.button(f"🔼 Move Up", key=f"move_up_{doc_id}"):
+                                current_order = template_data['order_number']
+                                higher_templates = [t for t in templates if t.to_dict()['order_number'] < current_order]
+                                if higher_templates:
+                                    nearest = max(higher_templates, key=lambda t: t.to_dict()['order_number'])
+                                    template_ref.collection("templates").document(doc_id).update(
+                                        {"order_number": nearest.to_dict()['order_number']})
+                                    template_ref.collection("templates").document(nearest.id).update(
+                                        {"order_number": current_order})
+                                    st.experimental_rerun()
+
+                        with col2:
+                            if st.button(f"🔽 Move Down", key=f"move_down_{doc_id}"):
+                                current_order = template_data['order_number']
+                                lower_templates = [t for t in templates if t.to_dict()['order_number'] > current_order]
+                                if lower_templates:
+                                    nearest = min(lower_templates, key=lambda t: t.to_dict()['order_number'])
+                                    template_ref.collection("templates").document(doc_id).update(
+                                        {"order_number": nearest.to_dict()['order_number']})
+                                    template_ref.collection("templates").document(nearest.id).update(
+                                        {"order_number": current_order})
+                                    st.experimental_rerun()
+
+                        with col3:
+                            new_visibility = "Private" if template_data['visibility'] == "Public" else "Public"
+                            if st.button(f"👁️ Toggle to {new_visibility}", key=f"toggle_vis_{doc_id}"):
+                                template_ref.collection("templates").document(doc_id).update(
+                                    {"visibility": new_visibility})
+                                st.success(f"Visibility changed to {new_visibility}.")
+                                st.experimental_rerun()
+
+                        with col4:
+                            if st.button(f"🗑️ Delete", key=f"delete_{doc_id}"):
+                                try:
+                                    blob = bucket.blob(template_data['storage_path'])
+                                    blob.delete()
+                                    template_ref.collection("templates").document(doc_id).delete()
+                                    st.success(f"Template {template_data['original_name']} deleted successfully.")
+                                    st.experimental_rerun()
+                                except Exception as e:
+                                    st.error(f"Error deleting template: {str(e)}")
 
 
-        # --- Tabs for each template type ---
+        # Create the tabs
         tab1, tab2, tab3, tab4 = st.tabs(["Internship Offer", "NDA", "Contract", "Proposal"])
+
         with tab1:
             show_templates_tab("Internship Offer")
+
         with tab2:
             show_templates_tab("NDA")
+
         with tab3:
             show_templates_tab("Contract")
+
         with tab4:
             show_templates_tab("Proposal")
-
-        # Template statistics
-        st.subheader("📊 Template Statistics")
-
-        col1, col2, col3 = st.columns(3)
-        # Optional: Fetch total template count across all types
-        doc_types = ["Internship Offer", "NDA", "Contract", "Proposal"]
-        all_templates = []
-        for dt in doc_types:
-            all_templates.extend(fetch_templates(dt))
-
-        col1.metric("Total Templates", len(all_templates))
-        col2.metric("Most Recent", max(
-            [tpl['upload_date'] for tpl in all_templates],
-            default="N/A"
-        ))
-        col3.metric("Largest Template", max(
-            [tpl['size_kb'] for tpl in all_templates],
-            default="N/A"
-        ))
 
 # Handle document types
 elif selected_option == "Internship Offer":
