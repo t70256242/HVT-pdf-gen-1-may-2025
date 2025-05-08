@@ -200,6 +200,158 @@ from firebase_admin import storage
 import tempfile
 
 
+# def handle_internship_offer():
+#     st.title("📄 Internship Offer Form")
+#
+#     # Initialize session state for multi-page form
+#     if 'form_step' not in st.session_state:
+#         st.session_state.form_step = 1
+#         st.session_state.offer_data = {}
+#
+#     if st.session_state.form_step == 1:
+#         # Step 1: Collect information (unchanged)
+#         with st.form("internship_offer_form"):
+#             name = st.text_input("Candidate Name")
+#             position = st.selectbox(
+#                 "Internship Position",
+#                 ["UI UX Designer", "AI Automations Developer", "Sales and Marketing"],
+#                 index=0
+#             )
+#             start_date = st.date_input("Start Date")
+#             stipend_input = st.text_input("Stipend (write out digits, no commas or dot)")
+#             if stipend_input.strip().isdigit():
+#                 stipend = "{:,}".format(int(stipend_input))
+#             else:
+#                 stipend = "0.00"
+#             hours = st.text_input("Work Hours per week")
+#             duration = st.number_input("Internship Duration (In Months)", min_value=1, max_value=24, step=1)
+#             first_paycheck = st.date_input("First Paycheck Date")
+#
+#             if st.form_submit_button("Generate Offer"):
+#                 st.session_state.offer_data = {
+#                     "name": name,
+#                     "position": position,
+#                     "start_date": start_date,
+#                     "stipend": stipend,
+#                     "hours": hours,
+#                     "duration": duration,
+#                     "first_paycheck": first_paycheck
+#                 }
+#                 st.session_state.form_step = 2
+#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+#
+#     elif st.session_state.form_step == 2:
+#         # Step 2: Preview and download
+#         st.success("Offer generated successfully!")
+#         st.button("← Back to Form", on_click=lambda: setattr(st.session_state, 'form_step', 1))
+#
+#         context = {
+#             "date": st.session_state.offer_data["start_date"].strftime("%B %d, %Y"),
+#             "name": st.session_state.offer_data["name"],
+#             "position": st.session_state.offer_data["position"],
+#             "stipend": str(st.session_state.offer_data["stipend"]),
+#             "hours": str(st.session_state.offer_data["hours"]),
+#             "internship_duration": str(st.session_state.offer_data["duration"]),
+#             "first_paycheck_date": st.session_state.offer_data["first_paycheck"].strftime("%B %d, %Y"),
+#         }
+#
+#         # Get template from Firestore
+#         doc_type = "Internship Offer"
+#         try:
+#             template_ref = firestore_db.collection("hvt_generator").document(doc_type)
+#             templates = template_ref.collection("templates").order_by("order_number").limit(1).get()
+#
+#             if not templates:
+#                 st.error("No templates found in the database for Internship Offer")
+#                 return
+#
+#             # Get the first template (order_number = 1)
+#             template_doc = templates[0]
+#             template_data = template_doc.to_dict()
+#
+#             # Check if storage_path exists (this is the key change)
+#             if 'storage_path' not in template_data:
+#                 st.error("Template storage path not found in the database")
+#                 return
+#             if template_data.get(
+#                     'file_type') != 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+#                 st.error("Template is not a Word document (.docx)")
+#                 return
+#             if template_data.get('visibility') != 'Public':
+#                 st.error("This template is not publicly available")
+#                 return
+#
+#             # Download the template file from Firebase Storage
+#             bucket = storage.bucket()
+#             blob = bucket.blob(template_data['storage_path'])
+#
+#             # Create a temporary file for the template
+#             with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_template:
+#                 blob.download_to_filename(temp_template.name)
+#                 template_path = temp_template.name
+#
+#         except Exception as e:
+#             st.error(f"Error fetching template: {str(e)}")
+#             return
+#
+#         # Generate temporary files
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf, \
+#                 tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_docx:
+#
+#             pdf_output = temp_pdf.name
+#             docx_output = temp_docx.name
+#
+#             # Use the downloaded template
+#             nda_edit(template_path, docx_output, context)
+#             main_converter(docx_output, pdf_output)
+#
+#             # Preview section
+#             st.subheader("Preview")
+#             st.write(f"**Candidate Name:** {st.session_state.offer_data['name']}")
+#             st.write(f"**Position:** {st.session_state.offer_data['position']}")
+#             st.write(f"**Duration:** {st.session_state.offer_data['duration']} months")
+#             st.write(f"**Stipend:** ₹{st.session_state.offer_data['stipend']}/month")
+#
+#             # PDF preview (requires pdfplumber)
+#             try:
+#                 import pdfplumber
+#                 with pdfplumber.open(pdf_output) as pdf:
+#                     preview_page = pdf.pages[0]
+#                     st.image(preview_page.to_image(resolution=150).original, caption="PDF Preview")
+#             except:
+#                 st.warning("Couldn't generate PDF preview. PDF file not available now.")
+#
+#             # Download buttons
+#             st.subheader("Download Documents")
+#             col1, col2 = st.columns(2)
+#
+#             with col1:
+#                 with open(pdf_output, "rb") as f_pdf:
+#                     st.download_button(
+#                         "⬇️ Download PDF",
+#                         f_pdf,
+#                         file_name=f"{st.session_state.offer_data['name']}_{st.session_state.offer_data['position']}_Offer_Letter.pdf",
+#                         mime="application/pdf"
+#                     )
+#
+#             with col2:
+#                 with open(docx_output, "rb") as f_docx:
+#                     st.download_button(
+#                         "⬇️ Download DOCX",
+#                         f_docx,
+#                         file_name=f"{st.session_state.offer_data['name']}_{st.session_state.offer_data['position']}_Offer_Letter.docx",
+#                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+#                     )
+#
+#         # Clean up temp files
+#         try:
+#             import os
+#             os.unlink(template_path)
+#             os.unlink(pdf_output)
+#             os.unlink(docx_output)
+#         except:
+#             pass
+
 def handle_internship_offer():
     st.title("📄 Internship Offer Form")
 
@@ -208,28 +360,37 @@ def handle_internship_offer():
         st.session_state.form_step = 1
         st.session_state.offer_data = {}
 
+    # Step 1: Collect information
     if st.session_state.form_step == 1:
-        # Step 1: Collect information (unchanged)
         with st.form("internship_offer_form"):
-            name = st.text_input("Candidate Name")
+            name = st.text_input("Candidate Name", placeholder="John Doe")
             position = st.selectbox(
                 "Internship Position",
                 ["UI UX Designer", "AI Automations Developer", "Sales and Marketing"],
                 index=0
             )
-            start_date = st.date_input("Start Date")
-            stipend_input = st.text_input("Stipend (write out digits, no commas or dot)")
+            start_date = st.date_input("Start Date", value=datetime.now().date())
+            stipend_input = st.text_input("Stipend (write out digits, no commas or dot)", placeholder="15000")
+
+            # Validate stipend input
             if stipend_input.strip().isdigit():
                 stipend = "{:,}".format(int(stipend_input))
             else:
                 stipend = "0.00"
-            hours = st.text_input("Work Hours per week")
-            duration = st.number_input("Internship Duration (In Months)", min_value=1, max_value=24, step=1)
-            first_paycheck = st.date_input("First Paycheck Date")
+                st.warning("Please enter a valid stipend amount (digits only)")
+
+            hours = st.text_input("Work Hours per week", placeholder="40")
+            duration = st.number_input("Internship Duration (In Months)", min_value=1, max_value=24, step=1, value=3)
+            first_paycheck = st.date_input("First Paycheck Date", value=datetime.now().date() + timedelta(days=30))
 
             if st.form_submit_button("Generate Offer"):
+                # Validate required fields
+                if not name.strip():
+                    st.error("Please enter candidate name")
+                    st.stop()
+
                 st.session_state.offer_data = {
-                    "name": name,
+                    "name": name.strip(),
                     "position": position,
                     "start_date": start_date,
                     "stipend": stipend,
@@ -238,13 +399,14 @@ def handle_internship_offer():
                     "first_paycheck": first_paycheck
                 }
                 st.session_state.form_step = 2
-                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+                st.experimental_rerun()
 
+    # Step 2: Preview and download
     elif st.session_state.form_step == 2:
-        # Step 2: Preview and download
         st.success("Offer generated successfully!")
         st.button("← Back to Form", on_click=lambda: setattr(st.session_state, 'form_step', 1))
 
+        # Prepare context data for template
         context = {
             "date": st.session_state.offer_data["start_date"].strftime("%B %d, %Y"),
             "name": st.session_state.offer_data["name"],
@@ -255,9 +417,13 @@ def handle_internship_offer():
             "first_paycheck_date": st.session_state.offer_data["first_paycheck"].strftime("%B %d, %Y"),
         }
 
-        # Get template from Firestore
-        doc_type = "Internship Offer"
         try:
+            # Create temp directory
+            temp_dir = os.path.join(tempfile.gettempdir(), "hvt_offer")
+            os.makedirs(temp_dir, exist_ok=True)
+
+            # Get template from Firestore
+            doc_type = "Internship Offer"
             template_ref = firestore_db.collection("hvt_generator").document(doc_type)
             templates = template_ref.collection("templates").order_by("order_number").limit(1).get()
 
@@ -265,11 +431,10 @@ def handle_internship_offer():
                 st.error("No templates found in the database for Internship Offer")
                 return
 
-            # Get the first template (order_number = 1)
             template_doc = templates[0]
             template_data = template_doc.to_dict()
 
-            # Check if storage_path exists (this is the key change)
+            # Validate template data
             if 'storage_path' not in template_data:
                 st.error("Template storage path not found in the database")
                 return
@@ -281,76 +446,98 @@ def handle_internship_offer():
                 st.error("This template is not publicly available")
                 return
 
-            # Download the template file from Firebase Storage
+            # Download template from Firebase Storage
             bucket = storage.bucket()
             blob = bucket.blob(template_data['storage_path'])
 
-            # Create a temporary file for the template
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_template:
-                blob.download_to_filename(temp_template.name)
-                template_path = temp_template.name
+            # Use absolute path for template
+            template_path = os.path.join(temp_dir, "template.docx")
+            blob.download_to_filename(template_path)
 
-        except Exception as e:
-            st.error(f"Error fetching template: {str(e)}")
-            return
+            # Verify download
+            if not os.path.exists(template_path):
+                st.error("Failed to download template file")
+                return
 
-        # Generate temporary files
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf, \
-                tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_docx:
+            # Generate output files with absolute paths
+            docx_output = os.path.join(temp_dir, "offer.docx")
+            pdf_output = os.path.join(temp_dir, "offer.pdf")
 
-            pdf_output = temp_pdf.name
-            docx_output = temp_docx.name
-
-            # Use the downloaded template
+            # Process documents
             nda_edit(template_path, docx_output, context)
             main_converter(docx_output, pdf_output)
 
             # Preview section
             st.subheader("Preview")
-            st.write(f"**Candidate Name:** {st.session_state.offer_data['name']}")
-            st.write(f"**Position:** {st.session_state.offer_data['position']}")
-            st.write(f"**Duration:** {st.session_state.offer_data['duration']} months")
-            st.write(f"**Stipend:** ₹{st.session_state.offer_data['stipend']}/month")
+            col1, col2 = st.columns(2)
 
-            # PDF preview (requires pdfplumber)
+            with col1:
+                st.write(f"**Candidate Name:** {st.session_state.offer_data['name']}")
+                st.write(f"**Position:** {st.session_state.offer_data['position']}")
+                st.write(f"**Start Date:** {st.session_state.offer_data['start_date'].strftime('%B %d, %Y')}")
+
+            with col2:
+                st.write(f"**Duration:** {st.session_state.offer_data['duration']} months")
+                st.write(f"**Stipend:** ₹{st.session_state.offer_data['stipend']}/month")
+                st.write(f"**First Paycheck:** {st.session_state.offer_data['first_paycheck'].strftime('%B %d, %Y')}")
+
+            # PDF preview
             try:
                 import pdfplumber
                 with pdfplumber.open(pdf_output) as pdf:
                     preview_page = pdf.pages[0]
-                    st.image(preview_page.to_image(resolution=150).original, caption="PDF Preview")
-            except:
-                st.warning("Couldn't generate PDF preview. PDF file not available now.")
+                    st.image(
+                        preview_page.to_image(resolution=150).original,
+                        caption="Offer Letter Preview",
+                        use_column_width=True
+                    )
+            except Exception as e:
+                st.warning(f"Couldn't generate PDF preview: {str(e)}")
 
             # Download buttons
             st.subheader("Download Documents")
             col1, col2 = st.columns(2)
 
+            # Generate download file names
+            file_prefix = f"{st.session_state.offer_data['name'].replace(' ', '_')}_{st.session_state.offer_data['position'].replace(' ', '_')}"
+
             with col1:
-                with open(pdf_output, "rb") as f_pdf:
-                    st.download_button(
-                        "⬇️ Download PDF",
-                        f_pdf,
-                        file_name=f"{st.session_state.offer_data['name']}_{st.session_state.offer_data['position']}_Offer_Letter.pdf",
-                        mime="application/pdf"
-                    )
+                if os.path.exists(pdf_output):
+                    with open(pdf_output, "rb") as f_pdf:
+                        st.download_button(
+                            "⬇️ Download PDF",
+                            f_pdf,
+                            file_name=f"{file_prefix}_Offer_Letter.pdf",
+                            mime="application/pdf"
+                        )
+                else:
+                    st.warning("PDF file not available")
 
             with col2:
-                with open(docx_output, "rb") as f_docx:
-                    st.download_button(
-                        "⬇️ Download DOCX",
-                        f_docx,
-                        file_name=f"{st.session_state.offer_data['name']}_{st.session_state.offer_data['position']}_Offer_Letter.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+                if os.path.exists(docx_output):
+                    with open(docx_output, "rb") as f_docx:
+                        st.download_button(
+                            "⬇️ Download DOCX",
+                            f_docx,
+                            file_name=f"{file_prefix}_Offer_Letter.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                else:
+                    st.warning("DOCX file not available")
 
-        # Clean up temp files
-        try:
-            import os
-            os.unlink(template_path)
-            os.unlink(pdf_output)
-            os.unlink(docx_output)
-        except:
-            pass
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)}")
+            st.error("Please try again or contact support if the problem persists.")
+
+        finally:
+            # Clean up temporary files
+            try:
+                files_to_remove = [template_path, docx_output, pdf_output]
+                for file_path in files_to_remove:
+                    if file_path and os.path.exists(file_path):
+                        os.unlink(file_path)
+            except Exception as e:
+                st.warning(f"Could not clean up temporary files: {str(e)}")
 
 
 def handle_nda():
