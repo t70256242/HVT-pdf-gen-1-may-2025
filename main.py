@@ -199,18 +199,12 @@ if selected_option == "Admin Panel":
 
         # Template management in tabs
         from streamlit_sortables import sort_items
-
         import streamlit as st
         import pdfplumber
 
 
         def preview_pdf_all_pages(pdf_path: str):
-            """
-            Displays all pages of a PDF file as images in Streamlit.
 
-            Args:
-                pdf_path (str): Path to the PDF file to preview.
-            """
             try:
                 with pdfplumber.open(pdf_path) as pdf:
                     for i, page in enumerate(pdf.pages):

@@ -272,6 +272,3 @@ context = {
 
 invoice_edit("try_invoice_2_page_1.docx", "modified_invoice_13.docx", context)
 
-# Step 2: Add payment section and footer
-# add_payment_details_section(output_filled, line_length=120, line_bold=True, line_font_size=15)
-
