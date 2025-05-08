@@ -399,7 +399,7 @@ def handle_internship_offer():
                     "first_paycheck": first_paycheck
                 }
                 st.session_state.form_step = 2
-                st.experimental_rerun()
+                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
     # Step 2: Preview and download
     elif st.session_state.form_step == 2:
