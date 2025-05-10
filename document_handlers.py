@@ -212,7 +212,7 @@ def handle_internship_offer():
                 col1, col2 = st.columns(2)
 
                 # Generate download file names
-                file_prefix = f"{st.session_state.offer_data['name'].replace(' ', ' ')}_{st.session_state.offer_data['position'].replace(' ', '_')}"
+                file_prefix = f"{st.session_state.offer_data['name'].replace(' ', ' ')} {st.session_state.offer_data['position'].replace(' ', ' ')}"
 
                 with col1:
                     if os.path.exists(pdf_output):
