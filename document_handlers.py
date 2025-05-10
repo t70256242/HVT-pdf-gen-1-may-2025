@@ -1007,12 +1007,14 @@ def fetch_proposal_templates_to_temp_dir(firestore_db, bucket):
 def handle_proposal():
     import os
     st.title("📄 Proposal Form")
-    folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+
 
     # Initialize session state for multi-page form
     if 'proposal_form_step' not in st.session_state:
         st.session_state.proposal_form_step = 1
         st.session_state.proposal_data = {}
+
+    folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
 
     # Step 1: Basic Information
     if st.session_state.proposal_form_step == 1:
