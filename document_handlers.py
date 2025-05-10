@@ -137,7 +137,7 @@ def handle_internship_offer():
                 "stipend": str(st.session_state.offer_data["stipend"]),
                 "hours": str(st.session_state.offer_data["hours"]),
                 "internship_duration": str(st.session_state.offer_data["duration"]),
-                "first_pay_cheque_date": st.session_state.offer_data["first_paycheck"].strftime("%B %d, %Y"),
+                "first_paycheque_date": st.session_state.offer_data["first_paycheck"].strftime("%B %d, %Y"),
             }
 
             try:
@@ -212,7 +212,7 @@ def handle_internship_offer():
                 col1, col2 = st.columns(2)
 
                 # Generate download file names
-                file_prefix = f"{st.session_state.offer_data['name'].replace(' ', '_')}_{st.session_state.offer_data['position'].replace(' ', '_')}"
+                file_prefix = f"{st.session_state.offer_data['name'].replace(' ', ' ')}_{st.session_state.offer_data['position'].replace(' ', '_')}"
 
                 with col1:
                     if os.path.exists(pdf_output):
@@ -220,7 +220,7 @@ def handle_internship_offer():
                             st.download_button(
                                 "⬇️ Download PDF",
                                 f_pdf,
-                                file_name=f"{file_prefix} Offer_Letter.pdf",
+                                file_name=f"{file_prefix} Offer Letter.pdf",
                                 mime="application/pdf"
                             )
                     else:
@@ -232,7 +232,7 @@ def handle_internship_offer():
                             st.download_button(
                                 "⬇️ Download DOCX",
                                 f_docx,
-                                file_name=f"{file_prefix} Offer_Letter.docx",
+                                file_name=f"{file_prefix} Offer Letter.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             )
                     else:
@@ -456,7 +456,7 @@ def handle_nda():
             # Generate documents
             replacements_docx = {
                 "date": st.session_state.nda_data["date"],
-                "client_name": f"              {st.session_state.nda_data['client_name']}",
+                "client_name": f"                 {st.session_state.nda_data['client_name']}",
                 "client_company_name": st.session_state.nda_data["client_company_name"],
                 "client_company_address": st.session_state.nda_data["client_company_address"]
             }
@@ -518,6 +518,7 @@ def handle_nda():
             # Preview section
             st.subheader("Preview")
             st.write(f"**Agreement Date:** {st.session_state.nda_data['date']}")
+            st.write(f"**Client Name:** {st.session_state.nda_data['client_name']}")
             st.write(f"**Client Company Name:** {st.session_state.nda_data['client_company_name']}")
             st.write(f"**Client Address:** {st.session_state.nda_data['client_company_address']}")
 
@@ -790,6 +791,7 @@ def handle_contract():
             # Preview section
             st.subheader("Preview")
             st.write(f"**Contract Date:** {st.session_state.contract_data['date']}")
+            st.write(f"**Client Name:** {st.session_state.contract_data['client_name']}")
             st.write(f"**Client Company Name:** {st.session_state.contract_data['client_company_name']}")
             st.write(f"**Client Address:** {st.session_state.contract_data['client_company_address']}")
             st.write(f"**Contract End Date:** {st.session_state.contract_data['contract_end']}")
