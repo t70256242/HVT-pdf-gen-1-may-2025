@@ -176,6 +176,11 @@ def handle_internship_offer():
                 # Use absolute path for template
                 template_path = os.path.join(temp_dir, "template.docx")
                 blob.download_to_filename(template_path)
+                blob = bucket.blob(template_data['storage_path'])
+
+                if not blob.exists():
+                    st.warning(f"❌ Skipping missing file: {template_data['storage_path']}")
+                    return  # Or continue to next file
 
                 # Verify download
                 if not os.path.exists(template_path):
