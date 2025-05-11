@@ -353,7 +353,7 @@ def handle_internship_offer():
                             template_doc = t
                             break
                         else:
-                            st.warning(f"❌ Skipping missing file: {t_data['storage_path']}")
+                            print(f"❌ Skipping missing file: {t_data['storage_path']}")
 
                 if not template_doc:
                     st.error("No valid public templates found in storage")
