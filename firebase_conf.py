@@ -49,3 +49,8 @@ firestore_db = firestore.client()
 firebase = pyrebase.initialize_app(firebaseConfig)
 auth = firebase.auth()
 rt_db = firebase.database()
+
+# docs = firestore_db.collection("hvt_generator").document("Proposal").collection("templates").limit(1).get()
+# print([doc.id for doc in docs])
+
+

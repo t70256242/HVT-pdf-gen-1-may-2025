@@ -255,6 +255,9 @@ if selected_option == "Admin Panel":
                                 'visibility'] == 'Public':
                                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                                     blob = bucket.blob(template_data['storage_path'])
+                                    if not blob.exists():
+                                        st.warning(f"❌ Skipping missing file: {template_data['storage_path']}")
+                                        return
                                     blob.download_to_filename(tmp_file.name)
                                     preview_pdf_all_pages(tmp_file.name)
                                     # preview_pdf_all_pages_grid(tmp_file.name, columns=3, width=220)
@@ -301,6 +304,9 @@ if selected_option == "Admin Panel":
                                 if st.button(f"🗑️ Delete", key=f"delete_{doc_id}"):
                                     try:
                                         blob = bucket.blob(template_data['storage_path'])
+                                        if not blob.exists():
+                                            st.warning(f"❌ Skipping missing file: {template_data['storage_path']}")
+                                            return
                                         blob.delete()
                                         template_ref.collection("templates").document(doc_id).delete()
                                         st.success(f"Template {template_data['original_name']} deleted successfully.")
@@ -324,6 +330,9 @@ if selected_option == "Admin Panel":
                         if template_data['file_type'] == 'application/pdf' and template_data['visibility'] == 'Public':
                             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                                 blob = bucket.blob(template_data['storage_path'])
+                                if not blob.exists():
+                                    st.warning(f"❌ Skipping missing file: {template_data['storage_path']}")
+                                    return
                                 blob.download_to_filename(tmp_file.name)
                                 preview_pdf_all_pages(tmp_file.name)
 
@@ -365,6 +374,9 @@ if selected_option == "Admin Panel":
                             if st.button(f"🗑️ Delete", key=f"delete_{doc_id}"):
                                 try:
                                     blob = bucket.blob(template_data['storage_path'])
+                                    if not blob.exists():
+                                        st.warning(f"❌ Skipping missing file: {template_data['storage_path']}")
+                                        return
                                     blob.delete()
                                     template_ref.collection("templates").document(doc_id).delete()
                                     st.success(f"Template {template_data['original_name']} deleted successfully.")
