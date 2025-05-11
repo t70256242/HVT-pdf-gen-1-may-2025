@@ -336,14 +336,39 @@ def handle_internship_offer():
                 # Fetch the template with order_number == 1
                 doc_type = "Internship Offer"
                 template_ref = firestore_db.collection("hvt_generator").document(doc_type)
-                templates = template_ref.collection("templates").where("order_number", "==", 1).get()
+                # Get all templates ordered by order_number
+                templates = template_ref.collection("templates").order_by("order_number").get()
 
-                if not templates:
-                    st.error("No templates found with order number 1 for Internship Offer")
+                template_doc = None
+                for t in templates:
+                    t_data = t.to_dict()
+                    if (
+                            t_data.get("visibility") == "Public" and
+                            t_data.get(
+                                "file_type") == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" and
+                            t_data.get("storage_path")
+                    ):
+                        blob = bucket.blob(t_data["storage_path"])
+                        if blob.exists():
+                            template_doc = t
+                            break
+                        else:
+                            st.warning(f"❌ Skipping missing file: {t_data['storage_path']}")
+
+                if not template_doc:
+                    st.error("No valid public templates found in storage")
                     return
 
-                template_doc = templates[0]
                 template_data = template_doc.to_dict()
+
+                # templates = template_ref.collection("templates").where("order_number", "==", 1).get()
+                #
+                # if not templates:
+                #     st.error("No templates found with order number 1 for Internship Offer")
+                #     return
+                #
+                # template_doc = templates[0]
+                # template_data = template_doc.to_dict()
 
                 if template_data.get("visibility") != "Public":
                     st.error("This template is not publicly available")
