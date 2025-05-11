@@ -147,8 +147,11 @@ def handle_internship_offer():
 
                 # Get template from Firestore
                 doc_type = "Internship Offer"
+                # template_ref = firestore_db.collection("hvt_generator").document(doc_type)
+                # templates = template_ref.collection("templates").order_by("order_number").limit(1).get()
+
                 template_ref = firestore_db.collection("hvt_generator").document(doc_type)
-                templates = template_ref.collection("templates").order_by("order_number").limit(1).get()
+                templates = template_ref.collection("templates").where("order_number", "==", 1).get()
 
                 if not templates:
                     st.error("No templates found in the database for Internship Offer")
