@@ -385,7 +385,7 @@ def handle_internship_offer():
 
                 blob = bucket.blob(storage_path)
                 if not blob.exists():
-                    st.warning(f"❌ Skipping missing file: {storage_path}")
+                    # st.warning(f"❌ Skipping missing file: {storage_path}")
                     return
 
                 template_path = os.path.join(temp_dir, "template.docx")
