@@ -9,10 +9,40 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 import tempfile
 import pdfplumber
+from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
 
 LOAD_LOCALLY = True
+
+
+def cleanup_broken_metadata():
+    """Check for and remove Firestore documents that reference non-existent storage blobs"""
+    try:
+        # Get all document types (e.g., Proposal, NDA, etc.)
+        doc_types = firestore_db.collection("hvt_generator").stream()
+
+        for doc_type in doc_types:
+            # Get all templates for this document type
+            templates_ref = firestore_db.collection("hvt_generator").document(doc_type.id).collection("templates")
+            docs = templates_ref.stream()
+
+            for doc in docs:
+                data = doc.to_dict()
+                if 'storage_path' in data:
+                    blob = bucket.blob(data['storage_path'])
+                    if not blob.exists():
+                        st.warning(f"Deleting broken Firestore doc: {data.get('original_name', doc.id)}")
+                        templates_ref.document(doc.id).delete()
+
+    except Exception as e:
+        st.error(f"Error during metadata cleanup: {str(e)}")
+
+
+# Set up scheduled cleanup (runs daily at 2 AM)
+scheduler = BackgroundScheduler()
+scheduler.add_job(cleanup_broken_metadata, 'cron', hour=2)
+scheduler.start()
 
 # Initialize session state
 if 'user' not in st.session_state:
