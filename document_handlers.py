@@ -637,45 +637,106 @@ def handle_proposal():
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
     # Step 2: Select Cover Page Template
+    # elif st.session_state.proposal_form_step == 2:
+    #     st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 1))
+    #
+    #     with st.form("proposal_form_step2"):
+    #         st.subheader("Select Cover Page Template")
+    #
+    #         folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+    #         cover_templates_dir = folder_paths.get("cover_templates")
+    #         print(f"cover temp _dir{cover_templates_dir}")
+    #
+    #         cover_options = {}
+    #         print(f"cover_temp path: {os.path.exists(cover_templates_dir)}")
+    #
+    #         if cover_templates_dir and os.path.exists(cover_templates_dir):
+    #             files = [f for f in os.listdir(cover_templates_dir) if f.endswith(".pdf")]
+    #             if files:
+    #                 for f in files:
+    #                     cover_options[os.path.splitext(f)[0]] = os.path.join(cover_templates_dir, f)
+    #             else:
+    #                 st.warning("No cover templates found in cover_templates folder.")
+    #         else:
+    #             st.warning("Cover templates folder not available.")
+    #
+    #
+    #         # Adjust layout based on number of options
+    #         if len(cover_options) > 3:
+    #             horizontal = True
+    #         else:
+    #             horizontal = False
+    #
+    #         selected_cover = st.radio(
+    #             "Choose a cover page style:",
+    #             list(cover_options.keys()),
+    #             horizontal=horizontal,
+    #             index=0  # Default to first option
+    #         )
+    #
+    #         # Process the selected template
+    #         template_path = cover_options[selected_cover]
+    #         output_pdf = "temp_cover.pdf"
+    #         pdf_editor = EditTextFile(template_path)
+    #
+    #         modifications = {
+    #             "Name:": f": {st.session_state.proposal_data['client_name']}",
+    #             "Email:": f": {st.session_state.proposal_data['email']}",
+    #             "Phone": f": {st.session_state.proposal_data['phone']}",
+    #             "Country": f": {st.session_state.proposal_data['country']}",
+    #             "14 April 2025": f"{st.session_state.proposal_data['proposal_date']}"
+    #         }
+    #
+    #         # Apply modifications and show preview
+    #         pdf_editor.modify_pdf_fields(output_pdf, modifications, 8)
+    #
+    #         # Display preview of the modified PDF
+    #         pdf_view(output_pdf)
+    #
+    #         if st.form_submit_button("Next: Select Index Page"):
+    #             st.session_state.proposal_data["cover_template"] = output_pdf
+    #             st.session_state.proposal_form_step = 3
+    #             st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
     elif st.session_state.proposal_form_step == 2:
         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 1))
 
-        with st.form("proposal_form_step2"):
+        # Fetch templates once (move outside the form to prevent refetching on every interaction)
+        folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+        cover_templates_dir = folder_paths.get("cover_templates")
+
+        cover_options = {}
+        if cover_templates_dir and os.path.exists(cover_templates_dir):
+            files = [f for f in os.listdir(cover_templates_dir) if f.endswith(".pdf")]
+            if files:
+                for f in files:
+                    cover_options[os.path.splitext(f)[0]] = os.path.join(cover_templates_dir, f)
+            else:
+                st.warning("No cover templates found in cover_templates folder.")
+        else:
+            st.warning("Cover templates folder not available.")
+
+        if not cover_options:
+            st.error("No valid cover templates available. Cannot proceed.")
+            st.stop()
+
+        # Create columns for layout
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
             st.subheader("Select Cover Page Template")
-
-            folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
-            cover_templates_dir = folder_paths.get("cover_templates")
-            print(f"cover temp _dir{cover_templates_dir}")
-
-            cover_options = {}
-            print(f"cover_temp path: {os.path.exists(cover_templates_dir)}")
-
-            if cover_templates_dir and os.path.exists(cover_templates_dir):
-                files = [f for f in os.listdir(cover_templates_dir) if f.endswith(".pdf")]
-                if files:
-                    for f in files:
-                        cover_options[os.path.splitext(f)[0]] = os.path.join(cover_templates_dir, f)
-                else:
-                    st.warning("No cover templates found in cover_templates folder.")
-            else:
-                st.warning("Cover templates folder not available.")
-
-
-            # Adjust layout based on number of options
-            if len(cover_options) > 3:
-                horizontal = True
-            else:
-                horizontal = False
-
-            selected_cover = st.radio(
+            # Use selectbox instead of radio
+            selected_cover = st.selectbox(
                 "Choose a cover page style:",
-                list(cover_options.keys()),
-                horizontal=horizontal,
-                index=0  # Default to first option
+                options=list(cover_options.keys()),
+                index=0,
+                key="cover_template_select"
             )
 
-            # Process the selected template
+            # Get the selected template path
             template_path = cover_options[selected_cover]
+
+            # Process the template (show unmodified version in preview)
             output_pdf = "temp_cover.pdf"
             pdf_editor = EditTextFile(template_path)
 
@@ -687,12 +748,19 @@ def handle_proposal():
                 "14 April 2025": f"{st.session_state.proposal_data['proposal_date']}"
             }
 
-            # Apply modifications and show preview
+            # Apply modifications
             pdf_editor.modify_pdf_fields(output_pdf, modifications, 8)
 
-            # Display preview of the modified PDF
-            pdf_view(output_pdf)
+        with col2:
+            st.subheader("Template Preview")
+            # Show preview of the selected template
+            if os.path.exists(output_pdf):
+                pdf_view(output_pdf)
+            else:
+                st.warning("Preview not available")
 
+        # Form submit button at the bottom
+        with st.form("proposal_form_step2"):
             if st.form_submit_button("Next: Select Index Page"):
                 st.session_state.proposal_data["cover_template"] = output_pdf
                 st.session_state.proposal_form_step = 3
@@ -948,7 +1016,7 @@ def handle_proposal():
             if st.button("Finalize and Generate Final Proposal"):
                 from PyPDF2 import PdfWriter
 
-                final_output_path = f"{st.session_state.proposal_data['client_name']}.pdf"
+                final_output_path = f"{st.session_state.proposal_data['client_name']} proposal.pdf"
                 writer = PdfWriter()
 
                 for i in range(num_pages):
