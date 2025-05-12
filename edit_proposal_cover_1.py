@@ -50,7 +50,7 @@ class EditTextFile:
                                 try:
                                     if field == "Date":
                                         # Search for "Date:" label on page
-                                        label_instances = page.search_for("Date:")
+                                        label_instances = page.search_for("Date")
                                         if label_instances:
                                             for label_rect in label_instances:
                                                 # Define area BELOW "Date:" to redact and replace
