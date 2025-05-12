@@ -48,7 +48,7 @@ class EditTextFile:
                             # print(f"Found potential match for '{variation}' on page {page_num + 1}")
                             for inst in instances:
                                 try:
-                                    if field == "Date:":
+                                    if field == "Date":
                                         # Search for "Date:" label on page
                                         label_instances = page.search_for("Date:")
                                         if label_instances:
