@@ -751,7 +751,7 @@ def handle_proposal():
                 "Email:": f": {st.session_state.proposal_data['email']}",
                 "Phone": f": {st.session_state.proposal_data['phone']}",
                 "Country": f": {st.session_state.proposal_data['country']}",
-                "Date:": f"{st.session_state.proposal_data['proposal_date']}"
+                "Date": f"{st.session_state.proposal_data['proposal_date']}"
             }
 
             # Apply modifications
