@@ -10,6 +10,7 @@ from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 import tempfile
 import pdfplumber
 from apscheduler.schedulers.background import BackgroundScheduler
+from manage_internship_roles_tab import manage_internship_roles_tab
 
 load_dotenv()
 
@@ -86,7 +87,9 @@ DOCUMENT_TYPES = [
 ]
 
 # Sidebar - Navigation and logout
-st.sidebar.title("📑 Navigation")
+# st.sidebar.title("📑 Navigation")
+st.sidebar.title("📑 Menu")
+
 selected_option = st.sidebar.radio("Choose a document type or Admin Panel", DOCUMENT_TYPES)
 
 # Show logout button if logged in
@@ -416,7 +419,7 @@ if selected_option == "Admin Panel":
 
 
         # Create the tabs
-        tab1, tab2, tab3, tab4 = st.tabs(["Internship Offer", "NDA", "Contract", "Proposal"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Internship Offer", "NDA", "Contract", "Proposal", "Internship Positions"])
 
         with tab1:
             show_templates_tab("Internship Offer")
@@ -429,6 +432,9 @@ if selected_option == "Admin Panel":
 
         with tab4:
             show_templates_tab("Proposal")
+
+        with tab5:
+            manage_internship_roles_tab()
 
 # Handle document types
 elif selected_option == "Internship Offer":

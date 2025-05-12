@@ -4,12 +4,13 @@ import pycountry
 import streamlit as st
 from nda_edit import nda_edit
 from docx_pdf_converter import main_converter
-from edit_proposal_cover import EditTextFile
+from edit_proposal_cover_1 import EditTextFile
 from merge_pdf import Merger
 import tempfile
 from firebase_conf import auth, rt_db, bucket, firestore_db
 import pdfplumber
 from firebase_admin import storage
+import json
 
 LOAD_LOCALLY = True
 
@@ -74,7 +75,6 @@ def fetch_and_organize_templates(firestore_db, base_temp_dir=None):
     return base_temp_dir
 
 
-
 def handle_internship_offer():
     st.title("📄 Internship Offer Form")
 
@@ -87,11 +87,22 @@ def handle_internship_offer():
     if st.session_state.form_step == 1:
         with st.form("internship_offer_form"):
             name = st.text_input("Candidate Name", placeholder="John Doe")
-            position = st.selectbox(
-                "Internship Position",
-                ["UI UX Designer", "AI Automations Developer", "Sales and Marketing"],
-                index=0
-            )
+            json_path = "roles.json"
+            try:
+                with open(json_path, "r") as f:
+                    data = json.load(f)
+                    data_ = data.get("internship_position", [])
+            except Exception as e:
+                st.error(f"Error loading roles from JSON: {str(e)}")
+            positions = data_
+            position = st.selectbox("Internship Position", positions, index=0 if positions else None)
+
+            # position = st.selectbox(
+            #     "Internship Position",
+            #     ["UI UX Designer", "AI Automations Developer", "Sales and Marketing"],
+            #     index=0
+            # )
+
             start_date = st.date_input("Start Date", value=datetime.now().date())
             stipend_input = st.text_input("Stipend (write out digits, no commas or dot)", placeholder="15000")
 
@@ -188,7 +199,8 @@ def handle_internship_offer():
                     st.error("This template is not publicly available")
                     return
 
-                if template_data.get("file_type") != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                if template_data.get(
+                        "file_type") != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
                     st.error("Template must be a Word document (.docx)")
                     return
 
@@ -229,7 +241,7 @@ def handle_internship_offer():
 
                 st.subheader("Download Documents")
                 col1, col2 = st.columns(2)
-                file_prefix = f"{context['name'].replace(' ', '_')}_{context['position'].replace(' ', '_')}"
+                file_prefix = f"{context['name'].replace(' ', ' ')} {context['position'].replace(' ', ' ')}"
 
                 with col1:
                     if os.path.exists(pdf_output):
@@ -237,7 +249,7 @@ def handle_internship_offer():
                             st.download_button(
                                 "⬇️ Download PDF",
                                 f_pdf,
-                                file_name=f"{file_prefix}_Offer_Letter.pdf",
+                                file_name=f"{file_prefix} Offer Letter.pdf",
                                 mime="application/pdf"
                             )
                     else:
@@ -249,7 +261,7 @@ def handle_internship_offer():
                             st.download_button(
                                 "⬇️ Download DOCX",
                                 f_docx,
-                                file_name=f"{file_prefix}_Offer_Letter.docx",
+                                file_name=f"{file_prefix} Offer Letter.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             )
                     else:
@@ -266,8 +278,6 @@ def handle_internship_offer():
                             os.unlink(file_path)
                 except Exception as e:
                     st.warning(f"Could not clean up temporary files: {str(e)}")
-
-
 
 
 def handle_nda():
@@ -404,7 +414,6 @@ def handle_nda():
             os.unlink(docx_output)
         except:
             pass
-
 
 
 def handle_contract():
@@ -547,9 +556,7 @@ def handle_contract():
             st.warning(f"Error cleaning up temporary files: {str(e)}")
 
 
-
 def fetch_proposal_templates_to_temp_dir(firestore_db, bucket):
-
     base_temp_dir = tempfile.mkdtemp(prefix="proposal_templates_")
 
     templates_ref = firestore_db.collection("hvt_generator").document("Proposal").collection("templates")
@@ -597,7 +604,6 @@ def fetch_proposal_templates_to_temp_dir(firestore_db, bucket):
 def handle_proposal():
     import os
     st.title("📄 Proposal Form")
-
 
     # Initialize session state for multi-page form
     if 'proposal_form_step' not in st.session_state:
@@ -745,7 +751,7 @@ def handle_proposal():
                 "Email:": f": {st.session_state.proposal_data['email']}",
                 "Phone": f": {st.session_state.proposal_data['phone']}",
                 "Country": f": {st.session_state.proposal_data['country']}",
-                "14 April 2025": f"{st.session_state.proposal_data['proposal_date']}"
+                "Date:": f"{st.session_state.proposal_data['proposal_date']}"
             }
 
             # Apply modifications
@@ -913,7 +919,6 @@ def handle_proposal():
         else:
             st.warning("Content templates folder not available.")
 
-
         st.subheader("Select Content Page Template")
 
         if 'selected_content' not in st.session_state:
@@ -953,7 +958,6 @@ def handle_proposal():
                 st.session_state.proposal_data["content_template"] = content_options[selected_content]
                 st.session_state.proposal_form_step = 6
                 # Optional: Add file existence checks
-
 
                 merger_files = [
                     st.session_state.proposal_data["cover_template"],
@@ -1032,7 +1036,3 @@ def handle_proposal():
 
         except FileNotFoundError:
             st.error("Merged PDF file not found. Please go back and complete the previous steps.")
-
-
-
-
