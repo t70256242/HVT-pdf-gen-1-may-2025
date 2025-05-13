@@ -642,67 +642,6 @@ def handle_proposal():
                 st.session_state.proposal_form_step = 2
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
-    # Step 2: Select Cover Page Template
-    # elif st.session_state.proposal_form_step == 2:
-    #     st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 1))
-    #
-    #     with st.form("proposal_form_step2"):
-    #         st.subheader("Select Cover Page Template")
-    #
-    #         folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
-    #         cover_templates_dir = folder_paths.get("cover_templates")
-    #         print(f"cover temp _dir{cover_templates_dir}")
-    #
-    #         cover_options = {}
-    #         print(f"cover_temp path: {os.path.exists(cover_templates_dir)}")
-    #
-    #         if cover_templates_dir and os.path.exists(cover_templates_dir):
-    #             files = [f for f in os.listdir(cover_templates_dir) if f.endswith(".pdf")]
-    #             if files:
-    #                 for f in files:
-    #                     cover_options[os.path.splitext(f)[0]] = os.path.join(cover_templates_dir, f)
-    #             else:
-    #                 st.warning("No cover templates found in cover_templates folder.")
-    #         else:
-    #             st.warning("Cover templates folder not available.")
-    #
-    #
-    #         # Adjust layout based on number of options
-    #         if len(cover_options) > 3:
-    #             horizontal = True
-    #         else:
-    #             horizontal = False
-    #
-    #         selected_cover = st.radio(
-    #             "Choose a cover page style:",
-    #             list(cover_options.keys()),
-    #             horizontal=horizontal,
-    #             index=0  # Default to first option
-    #         )
-    #
-    #         # Process the selected template
-    #         template_path = cover_options[selected_cover]
-    #         output_pdf = "temp_cover.pdf"
-    #         pdf_editor = EditTextFile(template_path)
-    #
-    #         modifications = {
-    #             "Name:": f": {st.session_state.proposal_data['client_name']}",
-    #             "Email:": f": {st.session_state.proposal_data['email']}",
-    #             "Phone": f": {st.session_state.proposal_data['phone']}",
-    #             "Country": f": {st.session_state.proposal_data['country']}",
-    #             "14 April 2025": f"{st.session_state.proposal_data['proposal_date']}"
-    #         }
-    #
-    #         # Apply modifications and show preview
-    #         pdf_editor.modify_pdf_fields(output_pdf, modifications, 8)
-    #
-    #         # Display preview of the modified PDF
-    #         pdf_view(output_pdf)
-    #
-    #         if st.form_submit_button("Next: Select Index Page"):
-    #             st.session_state.proposal_data["cover_template"] = output_pdf
-    #             st.session_state.proposal_form_step = 3
-    #             st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
     elif st.session_state.proposal_form_step == 2:
         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 1))
@@ -776,71 +715,6 @@ def handle_proposal():
     elif st.session_state.proposal_form_step == 3:
         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 2))
 
-        # folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
-        index_templates_dir = folder_paths.get("index_templates")
-        print(f"index temp _dir{index_templates_dir}")
-
-        index_options = {}
-        print(f"cover_temp path: {os.path.exists(index_templates_dir)}")
-
-        if index_templates_dir and os.path.exists(index_templates_dir):
-            files = [f for f in os.listdir(index_templates_dir) if f.endswith(".pdf")]
-            if files:
-                for f in files:
-                    index_options[os.path.splitext(f)[0]] = os.path.join(index_templates_dir, f)
-            else:
-                st.warning("No index templates found in index_templates folder.")
-        else:
-            st.warning("Index templates folder not available.")
-
-        st.subheader("Select Index Page Template")
-
-        # Create layout columns
-        col1, col2 = st.columns([1, 2])
-        if 'selected_index' not in st.session_state:
-            st.session_state.selected_index = None
-
-        options_list = list(index_options.keys())
-
-        if (
-                st.session_state.selected_index is not None
-                and st.session_state.selected_index in options_list
-        ):
-            initial_index = options_list.index(st.session_state.selected_index)
-        else:
-            initial_index = 0
-
-        with col1:
-            # Select box outside the form for dynamic updates
-            selected_index = st.selectbox(
-                "Choose an index page style:",
-                options=options_list,
-                index=initial_index
-            )
-
-        with col2:
-            # Show preview of selected index
-            pdf_view(index_options[selected_index])
-
-        # Now wrap the submission button in the form
-        with st.form("proposal_form_step3"):
-            # Just the submit button
-            if st.form_submit_button("Next: Select Business Requirements Sections"):
-                st.info("Adding Pages 3 to 6")
-                st.session_state.proposal_data["index_template"] = index_options[selected_index]
-                p3_to_p6_templates_dir = folder_paths.get("p3_to_p6_templates")
-                files = sorted([f for f in os.listdir(p3_to_p6_templates_dir) if not f.startswith('.')])
-                first_file = files[0]
-                first_file_path = os.path.join(p3_to_p6_templates_dir, first_file)
-
-                st.session_state.proposal_data["p3_p6_template"] = first_file_path
-                st.session_state.proposal_form_step = 4
-                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-
-    # Step 4: Select BR Page Template
-    elif st.session_state.proposal_form_step == 4:
-        st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 3))
-
         # Initialize selected_br if not set
         br_templates_dir = folder_paths.get("br_templates")
         print(f"br temp _dir{br_templates_dir}")
@@ -896,143 +770,603 @@ def handle_proposal():
             if st.form_submit_button("Next: Select Content Sections"):
                 st.info("Adding Pages 7 to 13")
                 st.session_state.proposal_data["br_template"] = br_options[selected_br]
-                st.session_state.proposal_form_step = 5
+                st.session_state.proposal_form_step = 4
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
-    # Step 5: Select Content Page Template
-    elif st.session_state.proposal_form_step == 5:
-        st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 4))
+    # Step 4: Select BR Page Template
+    # elif st.session_state.proposal_form_step == 4:
+    #     st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 3))
+    #
+    #     # Initialize selected_br if not set
+    #     br_templates_dir = folder_paths.get("br_templates")
+    #     print(f"br temp _dir{br_templates_dir}")
+    #
+    #     br_options = {}
+    #     print(f"br_temp path: {os.path.exists(br_templates_dir)}")
+    #
+    #     if br_templates_dir and os.path.exists(br_templates_dir):
+    #         files = [f for f in os.listdir(br_templates_dir) if f.endswith(".pdf")]
+    #         if files:
+    #             for f in files:
+    #                 br_options[os.path.splitext(f)[0]] = os.path.join(br_templates_dir, f)
+    #         else:
+    #             st.warning("No br templates found in br_templates folder.")
+    #     else:
+    #         st.warning("br templates folder not available.")
+    #
+    #     st.subheader("Select Business Requirements Page Template")
+    #
+    #     if 'selected_br' not in st.session_state:
+    #         st.session_state.selected_br = None
+    #
+    #     br_options_list = list(br_options.keys())
+    #
+    #     if (
+    #             st.session_state.selected_br is not None
+    #             and st.session_state.selected_br in br_options_list
+    #     ):
+    #         initial_br = br_options_list.index(st.session_state.selected_br)
+    #     else:
+    #         initial_br = 0
+    #
+    #     # Create layout columns
+    #     col1, col2 = st.columns([1, 2])
+    #
+    #     with col1:
+    #         # Select box outside the form for dynamic updates
+    #         selected_br = st.selectbox(
+    #             "Choose a Business Requirements page style:",
+    #             options=br_options_list,
+    #             index=initial_br
+    #         )
+    #         # Save current selection in session state
+    #         st.session_state.selected_br = selected_br
+    #
+    #     with col2:
+    #         # Show preview of selected BR
+    #         pdf_view(br_options[selected_br])
+    #
+    #     # Now wrap the submission button in the form
+    #     with st.form("proposal_form_step4"):
+    #         # Just the submit button
+    #         if st.form_submit_button("Next: Select Content Sections"):
+    #             st.info("Adding Pages 7 to 13")
+    #             st.session_state.proposal_data["br_template"] = br_options[selected_br]
+    #             st.session_state.proposal_form_step = 5
+    #             st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+    #
+    # # Step 5: Select Content Page Template
+    # elif st.session_state.proposal_form_step == 5:
+    #     st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 4))
+    #
+    #     content_templates_dir = folder_paths.get("content_templates")
+    #     print(f"content temp _dir{content_templates_dir}")
+    #
+    #     content_options = {}
+    #     print(f"content_temp path: {os.path.exists(content_templates_dir)}")
+    #
+    #     if content_templates_dir and os.path.exists(content_templates_dir):
+    #         files = [f for f in os.listdir(content_templates_dir) if f.endswith(".pdf")]
+    #         if files:
+    #             for f in files:
+    #                 content_options[os.path.splitext(f)[0]] = os.path.join(content_templates_dir, f)
+    #         else:
+    #             st.warning("No Content templates found in content_templates folder.")
+    #     else:
+    #         st.warning("Content templates folder not available.")
+    #
+    #     st.subheader("Select Content Page Template")
+    #
+    #     if 'selected_content' not in st.session_state:
+    #         st.session_state.selected_content = None
+    #
+    #     content_options_list = list(content_options.keys())
+    #
+    #     if (
+    #             st.session_state.selected_content is not None
+    #             and st.session_state.selected_content in content_options_list
+    #     ):
+    #         initial_content = content_options_list.index(st.session_state.selected_content)
+    #     else:
+    #         initial_content = 0
+    #
+    #     # Create layout columns
+    #     col1, col2 = st.columns([1, 2])
+    #
+    #     with col1:
+    #         # Select box outside the form for dynamic updates
+    #         selected_content = st.selectbox(
+    #             "Choose a Content page style:",
+    #             options=content_options_list,
+    #             index=initial_content
+    #         )
+    #         # Save current selection in session state
+    #         st.session_state.selected_content = selected_content
+    #
+    #     with col2:
+    #         # Show preview of selected Content
+    #         pdf_view(content_options[selected_content])
+    #
+    #     # Now wrap the submission button in the form
+    #     with st.form("proposal_form_step5"):
+    #         # Just the submit button
+    #         if st.form_submit_button("Next: Preview"):
+    #             st.session_state.proposal_data["content_template"] = content_options[selected_content]
+    #             st.session_state.proposal_form_step = 6
+    #             # Optional: Add file existence checks
+    #
+    #             merger_files = [
+    #                 st.session_state.proposal_data["cover_template"],
+    #                 st.session_state.proposal_data["index_template"],
+    #                 st.session_state.proposal_data["p3_p6_template"],  # Now using the correct key
+    #                 st.session_state.proposal_data["br_template"],
+    #                 st.session_state.proposal_data["content_template"]
+    #             ]
+    #
+    #             import os
+    #             for file_path in merger_files:
+    #                 if not os.path.exists(file_path):
+    #                     st.error(f"File not found: {file_path}")
+    #                     return
+    #
+    #             merger = Merger(merger_files)
+    #             merger.merge_pdf_files("merged_output.pdf")
+    #             st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+    #
+    # elif st.session_state.proposal_form_step == 6:
+    #     from PyPDF2 import PdfReader
+    #
+    #     st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 5))
+    #     st.title("📄 Preview and Finalize Proposal")
+    #
+    #     merged_path = "merged_output.pdf"
+    #     try:
+    #         reader = PdfReader(merged_path)
+    #         num_pages = len(reader.pages)
+    #
+    #         if 'included_pages' not in st.session_state:
+    #             # By default include all pages
+    #             st.session_state.included_pages = [True] * num_pages
+    #
+    #         st.write("Use the toggles below to include or exclude each page in the final proposal:")
+    #
+    #         for i in range(num_pages):
+    #             col1, col2 = st.columns([1, 4])
+    #             with col1:
+    #                 st.session_state.included_pages[i] = st.radio(
+    #                     f"Page {i + 1}",
+    #                     options=["Include", "Exclude"],
+    #                     index=0 if st.session_state.included_pages[i] else 1,
+    #                     key=f"page_select_{i}"
+    #                 ) == "Include"
+    #
+    #             with col2:
+    #                 try:
+    #                     import pdfplumber
+    #                     with pdfplumber.open(merged_path) as pdf:
+    #                         preview_image = pdf.pages[i].to_image(resolution=100)
+    #                         st.image(
+    #                             preview_image.original,
+    #                             caption=f"Page {i + 1}",
+    #                             use_column_width=True
+    #                         )
+    #                 except Exception as e:
+    #                     st.warning(f"Could not preview Page {i + 1}: {str(e)}")
+    #
+    #         if st.button("Finalize and Generate Final Proposal"):
+    #             from PyPDF2 import PdfWriter
+    #
+    #             final_output_path = f"{st.session_state.proposal_data['client_name']} proposal.pdf"
+    #             writer = PdfWriter()
+    #
+    #             for i in range(num_pages):
+    #                 if st.session_state.included_pages[i]:
+    #                     writer.add_page(reader.pages[i])
+    #
+    #             with open(final_output_path, "wb") as f_out:
+    #                 writer.write(f_out)
+    #
+    #             st.success("✅ Final proposal generated!")
+    #             with open(final_output_path, "rb") as f:
+    #                 st.download_button("Download Final Proposal", f, file_name=final_output_path)
+    #
+    #     except FileNotFoundError:
+    #         st.error("Merged PDF file not found. Please go back and complete the previous steps.")
 
-        content_templates_dir = folder_paths.get("content_templates")
-        print(f"content temp _dir{content_templates_dir}")
 
-        content_options = {}
-        print(f"content_temp path: {os.path.exists(content_templates_dir)}")
 
-        if content_templates_dir and os.path.exists(content_templates_dir):
-            files = [f for f in os.listdir(content_templates_dir) if f.endswith(".pdf")]
-            if files:
-                for f in files:
-                    content_options[os.path.splitext(f)[0]] = os.path.join(content_templates_dir, f)
-            else:
-                st.warning("No Content templates found in content_templates folder.")
-        else:
-            st.warning("Content templates folder not available.")
 
-        st.subheader("Select Content Page Template")
 
-        if 'selected_content' not in st.session_state:
-            st.session_state.selected_content = None
 
-        content_options_list = list(content_options.keys())
 
-        if (
-                st.session_state.selected_content is not None
-                and st.session_state.selected_content in content_options_list
-        ):
-            initial_content = content_options_list.index(st.session_state.selected_content)
-        else:
-            initial_content = 0
 
-        # Create layout columns
-        col1, col2 = st.columns([1, 2])
 
-        with col1:
-            # Select box outside the form for dynamic updates
-            selected_content = st.selectbox(
-                "Choose a Content page style:",
-                options=content_options_list,
-                index=initial_content
-            )
-            # Save current selection in session state
-            st.session_state.selected_content = selected_content
 
-        with col2:
-            # Show preview of selected Content
-            pdf_view(content_options[selected_content])
 
-        # Now wrap the submission button in the form
-        with st.form("proposal_form_step5"):
-            # Just the submit button
-            if st.form_submit_button("Next: Preview"):
-                st.session_state.proposal_data["content_template"] = content_options[selected_content]
-                st.session_state.proposal_form_step = 6
-                # Optional: Add file existence checks
 
-                merger_files = [
-                    st.session_state.proposal_data["cover_template"],
-                    st.session_state.proposal_data["index_template"],
-                    st.session_state.proposal_data["p3_p6_template"],  # Now using the correct key
-                    st.session_state.proposal_data["br_template"],
-                    st.session_state.proposal_data["content_template"]
-                ]
 
-                import os
-                for file_path in merger_files:
-                    if not os.path.exists(file_path):
-                        st.error(f"File not found: {file_path}")
-                        return
 
-                merger = Merger(merger_files)
-                merger.merge_pdf_files("merged_output.pdf")
-                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
-    elif st.session_state.proposal_form_step == 6:
-        from PyPDF2 import PdfReader
 
-        st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 5))
-        st.title("📄 Preview and Finalize Proposal")
 
-        merged_path = "merged_output.pdf"
-        try:
-            reader = PdfReader(merged_path)
-            num_pages = len(reader.pages)
 
-            if 'included_pages' not in st.session_state:
-                # By default include all pages
-                st.session_state.included_pages = [True] * num_pages
 
-            st.write("Use the toggles below to include or exclude each page in the final proposal:")
 
-            for i in range(num_pages):
-                col1, col2 = st.columns([1, 4])
-                with col1:
-                    st.session_state.included_pages[i] = st.radio(
-                        f"Page {i + 1}",
-                        options=["Include", "Exclude"],
-                        index=0 if st.session_state.included_pages[i] else 1,
-                        key=f"page_select_{i}"
-                    ) == "Include"
 
-                with col2:
-                    try:
-                        import pdfplumber
-                        with pdfplumber.open(merged_path) as pdf:
-                            preview_image = pdf.pages[i].to_image(resolution=100)
-                            st.image(
-                                preview_image.original,
-                                caption=f"Page {i + 1}",
-                                use_column_width=True
-                            )
-                    except Exception as e:
-                        st.warning(f"Could not preview Page {i + 1}: {str(e)}")
 
-            if st.button("Finalize and Generate Final Proposal"):
-                from PyPDF2 import PdfWriter
 
-                final_output_path = f"{st.session_state.proposal_data['client_name']} proposal.pdf"
-                writer = PdfWriter()
 
-                for i in range(num_pages):
-                    if st.session_state.included_pages[i]:
-                        writer.add_page(reader.pages[i])
-
-                with open(final_output_path, "wb") as f_out:
-                    writer.write(f_out)
-
-                st.success("✅ Final proposal generated!")
-                with open(final_output_path, "rb") as f:
-                    st.download_button("Download Final Proposal", f, file_name=final_output_path)
-
-        except FileNotFoundError:
-            st.error("Merged PDF file not found. Please go back and complete the previous steps.")
+# def handle_proposal():
+#     import os
+#     st.title("📄 Proposal Form")
+#
+#     # Initialize session state for multi-page form
+#     if 'proposal_form_step' not in st.session_state:
+#         st.session_state.proposal_form_step = 1
+#         st.session_state.proposal_data = {}
+#
+#     folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+#
+#     # Step 1: Basic Information
+#     if st.session_state.proposal_form_step == 1:
+#         with st.form("proposal_form_step1"):
+#             st.subheader("Client Information")
+#             name = st.text_input("Client Name / Company Name")
+#             # company = st.text_input("Company Name")
+#             email = st.text_input("Email")
+#             phone = st.text_input("Phone")
+#             countries = sorted([country.name for country in pycountry.countries])
+#             country = st.selectbox("Select Country", countries)
+#             # st.subheader("Proposal Details")
+#             # project_name = st.text_input("Project Name")
+#             proposal_date = st.date_input("Proposal Date")
+#             # validity_days = st.number_input("Proposal Validity (Days)", min_value=1, max_value=365, value=30)
+#
+#             if st.form_submit_button("Next: Select Cover Page"):
+#                 st.session_state.proposal_data = {
+#                     "client_name": name,
+#                     # "company_name": company,
+#                     "email": email,
+#                     "phone": phone,
+#                     "country": country,
+#                     # "project_name": project_name,
+#                     "proposal_date": proposal_date.strftime("%B %d, %Y"),
+#                     # "validity_days": validity_days,
+#                     # "valid_until": (proposal_date + timedelta(days=validity_days)).strftime("%B %d, %Y")
+#                 }
+#                 st.session_state.proposal_form_step = 2
+#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+#
+#
+#     elif st.session_state.proposal_form_step == 2:
+#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 1))
+#
+#         # Fetch templates once (move outside the form to prevent refetching on every interaction)
+#         folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+#         cover_templates_dir = folder_paths.get("cover_templates")
+#
+#         cover_options = {}
+#         if cover_templates_dir and os.path.exists(cover_templates_dir):
+#             files = [f for f in os.listdir(cover_templates_dir) if f.endswith(".pdf")]
+#             if files:
+#                 for f in files:
+#                     cover_options[os.path.splitext(f)[0]] = os.path.join(cover_templates_dir, f)
+#             else:
+#                 st.warning("No cover templates found in cover_templates folder.")
+#         else:
+#             st.warning("Cover templates folder not available.")
+#
+#         if not cover_options:
+#             st.error("No valid cover templates available. Cannot proceed.")
+#             st.stop()
+#
+#         # Create columns for layout
+#         col1, col2 = st.columns([1, 2])
+#
+#         with col1:
+#             st.subheader("Select Cover Page Template")
+#             # Use selectbox instead of radio
+#             selected_cover = st.selectbox(
+#                 "Choose a cover page style:",
+#                 options=list(cover_options.keys()),
+#                 index=0,
+#                 key="cover_template_select"
+#             )
+#
+#             # Get the selected template path
+#             template_path = cover_options[selected_cover]
+#
+#             # Process the template (show unmodified version in preview)
+#             output_pdf = "temp_cover.pdf"
+#             pdf_editor = EditTextFile(template_path)
+#
+#             modifications = {
+#                 "Name:": f": {st.session_state.proposal_data['client_name']}",
+#                 "Email:": f": {st.session_state.proposal_data['email']}",
+#                 "Phone": f": {st.session_state.proposal_data['phone']}",
+#                 "Country": f": {st.session_state.proposal_data['country']}",
+#                 "Date": f"{st.session_state.proposal_data['proposal_date']}"
+#             }
+#
+#             # Apply modifications
+#             pdf_editor.modify_pdf_fields(output_pdf, modifications, 8)
+#
+#         with col2:
+#             st.subheader("Template Preview")
+#             # Show preview of the selected template
+#             if os.path.exists(output_pdf):
+#                 pdf_view(output_pdf)
+#             else:
+#                 st.warning("Preview not available")
+#
+#         # Form submit button at the bottom
+#         with st.form("proposal_form_step2"):
+#             if st.form_submit_button("Next: Select Index Page"):
+#                 st.session_state.proposal_data["cover_template"] = output_pdf
+#                 st.session_state.proposal_form_step = 3
+#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+#
+#     # Step 3: Select Index Page Template
+#     elif st.session_state.proposal_form_step == 3:
+#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 2))
+#
+#         # folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+#         index_templates_dir = folder_paths.get("index_templates")
+#         print(f"index temp _dir{index_templates_dir}")
+#
+#         index_options = {}
+#         print(f"cover_temp path: {os.path.exists(index_templates_dir)}")
+#
+#         if index_templates_dir and os.path.exists(index_templates_dir):
+#             files = [f for f in os.listdir(index_templates_dir) if f.endswith(".pdf")]
+#             if files:
+#                 for f in files:
+#                     index_options[os.path.splitext(f)[0]] = os.path.join(index_templates_dir, f)
+#             else:
+#                 st.warning("No index templates found in index_templates folder.")
+#         else:
+#             st.warning("Index templates folder not available.")
+#
+#         st.subheader("Select Index Page Template")
+#
+#         # Create layout columns
+#         col1, col2 = st.columns([1, 2])
+#         if 'selected_index' not in st.session_state:
+#             st.session_state.selected_index = None
+#
+#         options_list = list(index_options.keys())
+#
+#         if (
+#                 st.session_state.selected_index is not None
+#                 and st.session_state.selected_index in options_list
+#         ):
+#             initial_index = options_list.index(st.session_state.selected_index)
+#         else:
+#             initial_index = 0
+#
+#         with col1:
+#             # Select box outside the form for dynamic updates
+#             selected_index = st.selectbox(
+#                 "Choose an index page style:",
+#                 options=options_list,
+#                 index=initial_index
+#             )
+#
+#         with col2:
+#             # Show preview of selected index
+#             pdf_view(index_options[selected_index])
+#
+#         # Now wrap the submission button in the form
+#         with st.form("proposal_form_step3"):
+#             # Just the submit button
+#             if st.form_submit_button("Next: Select Business Requirements Sections"):
+#                 st.info("Adding Pages 3 to 6")
+#                 st.session_state.proposal_data["index_template"] = index_options[selected_index]
+#                 p3_to_p6_templates_dir = folder_paths.get("p3_to_p6_templates")
+#                 files = sorted([f for f in os.listdir(p3_to_p6_templates_dir) if not f.startswith('.')])
+#                 first_file = files[0]
+#                 first_file_path = os.path.join(p3_to_p6_templates_dir, first_file)
+#
+#                 st.session_state.proposal_data["p3_p6_template"] = first_file_path
+#                 st.session_state.proposal_form_step = 4
+#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+#
+#     # Step 4: Select BR Page Template
+#     elif st.session_state.proposal_form_step == 4:
+#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 3))
+#
+#         # Initialize selected_br if not set
+#         br_templates_dir = folder_paths.get("br_templates")
+#         print(f"br temp _dir{br_templates_dir}")
+#
+#         br_options = {}
+#         print(f"br_temp path: {os.path.exists(br_templates_dir)}")
+#
+#         if br_templates_dir and os.path.exists(br_templates_dir):
+#             files = [f for f in os.listdir(br_templates_dir) if f.endswith(".pdf")]
+#             if files:
+#                 for f in files:
+#                     br_options[os.path.splitext(f)[0]] = os.path.join(br_templates_dir, f)
+#             else:
+#                 st.warning("No br templates found in br_templates folder.")
+#         else:
+#             st.warning("br templates folder not available.")
+#
+#         st.subheader("Select Business Requirements Page Template")
+#
+#         if 'selected_br' not in st.session_state:
+#             st.session_state.selected_br = None
+#
+#         br_options_list = list(br_options.keys())
+#
+#         if (
+#                 st.session_state.selected_br is not None
+#                 and st.session_state.selected_br in br_options_list
+#         ):
+#             initial_br = br_options_list.index(st.session_state.selected_br)
+#         else:
+#             initial_br = 0
+#
+#         # Create layout columns
+#         col1, col2 = st.columns([1, 2])
+#
+#         with col1:
+#             # Select box outside the form for dynamic updates
+#             selected_br = st.selectbox(
+#                 "Choose a Business Requirements page style:",
+#                 options=br_options_list,
+#                 index=initial_br
+#             )
+#             # Save current selection in session state
+#             st.session_state.selected_br = selected_br
+#
+#         with col2:
+#             # Show preview of selected BR
+#             pdf_view(br_options[selected_br])
+#
+#         # Now wrap the submission button in the form
+#         with st.form("proposal_form_step4"):
+#             # Just the submit button
+#             if st.form_submit_button("Next: Select Content Sections"):
+#                 st.info("Adding Pages 7 to 13")
+#                 st.session_state.proposal_data["br_template"] = br_options[selected_br]
+#                 st.session_state.proposal_form_step = 5
+#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+#
+#     # Step 5: Select Content Page Template
+#     elif st.session_state.proposal_form_step == 5:
+#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 4))
+#
+#         content_templates_dir = folder_paths.get("content_templates")
+#         print(f"content temp _dir{content_templates_dir}")
+#
+#         content_options = {}
+#         print(f"content_temp path: {os.path.exists(content_templates_dir)}")
+#
+#         if content_templates_dir and os.path.exists(content_templates_dir):
+#             files = [f for f in os.listdir(content_templates_dir) if f.endswith(".pdf")]
+#             if files:
+#                 for f in files:
+#                     content_options[os.path.splitext(f)[0]] = os.path.join(content_templates_dir, f)
+#             else:
+#                 st.warning("No Content templates found in content_templates folder.")
+#         else:
+#             st.warning("Content templates folder not available.")
+#
+#         st.subheader("Select Content Page Template")
+#
+#         if 'selected_content' not in st.session_state:
+#             st.session_state.selected_content = None
+#
+#         content_options_list = list(content_options.keys())
+#
+#         if (
+#                 st.session_state.selected_content is not None
+#                 and st.session_state.selected_content in content_options_list
+#         ):
+#             initial_content = content_options_list.index(st.session_state.selected_content)
+#         else:
+#             initial_content = 0
+#
+#         # Create layout columns
+#         col1, col2 = st.columns([1, 2])
+#
+#         with col1:
+#             # Select box outside the form for dynamic updates
+#             selected_content = st.selectbox(
+#                 "Choose a Content page style:",
+#                 options=content_options_list,
+#                 index=initial_content
+#             )
+#             # Save current selection in session state
+#             st.session_state.selected_content = selected_content
+#
+#         with col2:
+#             # Show preview of selected Content
+#             pdf_view(content_options[selected_content])
+#
+#         # Now wrap the submission button in the form
+#         with st.form("proposal_form_step5"):
+#             # Just the submit button
+#             if st.form_submit_button("Next: Preview"):
+#                 st.session_state.proposal_data["content_template"] = content_options[selected_content]
+#                 st.session_state.proposal_form_step = 6
+#                 # Optional: Add file existence checks
+#
+#                 merger_files = [
+#                     st.session_state.proposal_data["cover_template"],
+#                     st.session_state.proposal_data["index_template"],
+#                     st.session_state.proposal_data["p3_p6_template"],  # Now using the correct key
+#                     st.session_state.proposal_data["br_template"],
+#                     st.session_state.proposal_data["content_template"]
+#                 ]
+#
+#                 import os
+#                 for file_path in merger_files:
+#                     if not os.path.exists(file_path):
+#                         st.error(f"File not found: {file_path}")
+#                         return
+#
+#                 merger = Merger(merger_files)
+#                 merger.merge_pdf_files("merged_output.pdf")
+#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+#
+#     elif st.session_state.proposal_form_step == 6:
+#         from PyPDF2 import PdfReader
+#
+#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 5))
+#         st.title("📄 Preview and Finalize Proposal")
+#
+#         merged_path = "merged_output.pdf"
+#         try:
+#             reader = PdfReader(merged_path)
+#             num_pages = len(reader.pages)
+#
+#             if 'included_pages' not in st.session_state:
+#                 # By default include all pages
+#                 st.session_state.included_pages = [True] * num_pages
+#
+#             st.write("Use the toggles below to include or exclude each page in the final proposal:")
+#
+#             for i in range(num_pages):
+#                 col1, col2 = st.columns([1, 4])
+#                 with col1:
+#                     st.session_state.included_pages[i] = st.radio(
+#                         f"Page {i + 1}",
+#                         options=["Include", "Exclude"],
+#                         index=0 if st.session_state.included_pages[i] else 1,
+#                         key=f"page_select_{i}"
+#                     ) == "Include"
+#
+#                 with col2:
+#                     try:
+#                         import pdfplumber
+#                         with pdfplumber.open(merged_path) as pdf:
+#                             preview_image = pdf.pages[i].to_image(resolution=100)
+#                             st.image(
+#                                 preview_image.original,
+#                                 caption=f"Page {i + 1}",
+#                                 use_column_width=True
+#                             )
+#                     except Exception as e:
+#                         st.warning(f"Could not preview Page {i + 1}: {str(e)}")
+#
+#             if st.button("Finalize and Generate Final Proposal"):
+#                 from PyPDF2 import PdfWriter
+#
+#                 final_output_path = f"{st.session_state.proposal_data['client_name']} proposal.pdf"
+#                 writer = PdfWriter()
+#
+#                 for i in range(num_pages):
+#                     if st.session_state.included_pages[i]:
+#                         writer.add_page(reader.pages[i])
+#
+#                 with open(final_output_path, "wb") as f_out:
+#                     writer.write(f_out)
+#
+#                 st.success("✅ Final proposal generated!")
+#                 with open(final_output_path, "rb") as f:
+#                     st.download_button("Download Final Proposal", f, file_name=final_output_path)
+#
+#         except FileNotFoundError:
+#             st.error("Merged PDF file not found. Please go back and complete the previous steps.")
