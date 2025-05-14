@@ -908,7 +908,9 @@ def handle_proposal():
             )
 
             template_path = cover_options[selected_cover_name]
-            output_pdf = "temp_cover.pdf"
+            temp_dir = tempfile.gettempdir()
+            output_pdf = os.path.join(temp_dir, "temp_cover.pdf")
+            # output_pdf = "temp_cover.pdf"
             pdf_editor = EditTextFile(template_path)
 
             modifications = {
