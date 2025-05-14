@@ -907,10 +907,17 @@ def handle_proposal():
                 key="cover_template_select"
             )
 
-            template_path = cover_options[selected_cover_name]
+            selected_template = cover_options[selected_cover_name]
+            template_path = fetch_path_from_temp_dir("cover_page", selected_template, folder_paths)
+
+            if not template_path:
+                st.warning("Cover page template file not found.")
+                return
+
+            # Ensure output path is valid in Streamlit Cloud
             temp_dir = tempfile.gettempdir()
-            output_pdf = os.path.join(temp_dir, "temp_cover.pdf")
-            # output_pdf = "temp_cover.pdf"
+            output_pdf = os.path.join(temp_dir, "modified_cover.pdf")
+
             pdf_editor = EditTextFile(template_path)
 
             modifications = {
@@ -923,8 +930,7 @@ def handle_proposal():
 
             pdf_editor.modify_pdf_fields(output_pdf, modifications, 8)
 
-        with col2:
-            # st.subheader("Template Preview")
+            # Preview
             if os.path.exists(output_pdf):
                 pdf_view(output_pdf)
             else:
