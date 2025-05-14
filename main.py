@@ -165,7 +165,7 @@ if selected_option == "Admin Panel":
                         # Additional fields for Proposal templates
                         # is_pdf = st.checkbox("Is this a PDF template?")
                         pdf_name = st.text_input("Name of PDF (if applicable)")
-                        num_pages = st.number_input("Number of pages", min_value=1, value=1)
+                        num_pages = st.number_input("BR Pages Number", min_value=1, value=1)
 
                     if st.form_submit_button("Save Template"):
                         try:
@@ -425,7 +425,7 @@ if selected_option == "Admin Panel":
                                     disabled=not st.session_state[f"edit_mode_{doc_id}"]
                                 )
                                 new_num_pages = st.number_input(
-                                    "Number of Pages",
+                                    "BR pages number",
                                     min_value=1,
                                     value=int(template_data.get("num_pages", 1)),
                                     key=f"num_pages_{doc_id}",
