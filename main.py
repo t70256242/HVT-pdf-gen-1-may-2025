@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import streamlit as st
 from dotenv import load_dotenv
 from firebase_conf import auth, rt_db, bucket, firestore_db
-from document_handlers import handle_internship_offer, handle_nda, handle_contract, handle_proposal
+from document_handlers import handle_internship_offer, handle_nda, handle_invoice, handle_contract, handle_proposal
 from google.cloud import firestore
 from google.cloud.firestore_v1 import SERVER_TIMESTAMP
 import tempfile
@@ -81,6 +81,7 @@ def admin_login(email, password):
 DOCUMENT_TYPES = [
     "Internship Offer",
     "NDA",
+    "Invoice",
     "Contract",
     "Proposal",
     "Admin Panel"
@@ -120,11 +121,10 @@ if selected_option == "Admin Panel":
         st.subheader("Upload New Templates")
 
         # Template upload section
-        # Template upload section
         with st.expander("➕ Upload Template", expanded=True):
             doc_type = st.selectbox(
                 "Select Document Type",
-                ["Internship Offer", "NDA", "Contract", "Proposal"],
+                ["Internship Offer", "NDA", "Invoice", "Contract", "Proposal"],
                 key="doc_type_select"
             )
 
@@ -171,7 +171,6 @@ if selected_option == "Admin Panel":
                         try:
                             # Generate standardized filename
                             template_ref = firestore_db.collection("hvt_generator").document(doc_type)
-
 
                             # count = len([doc.id for doc in template_ref.collection("templates").get()])
                             count = len([doc.id for doc in template_ref.collection(
@@ -936,7 +935,7 @@ if selected_option == "Admin Panel":
 
 
         # Create the tabs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Internship Offer", "NDA", "Contract", "Proposal", "Internship Positions"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Internship Offer", "NDA", "Invoice", "Contract", "Proposal", "Internship Positions"])
 
         with tab1:
             show_templates_tab("Internship Offer")
@@ -945,13 +944,86 @@ if selected_option == "Admin Panel":
             show_templates_tab("NDA")
 
         with tab3:
-            show_templates_tab("Contract")
+            show_templates_tab("Invoice")
 
         with tab4:
-            show_templates_tab("Proposal")
+            show_templates_tab("Contract")
 
         with tab5:
+            show_templates_tab("Proposal")
+
+        with tab6:
             manage_internship_roles_tab()
+
+        import os
+        import tempfile
+        import mimetypes
+        import base64
+
+        st.markdown("---")
+        st.subheader("🗂️ Manage Generated Documents")
+
+        selected_generated_type = st.selectbox(
+            "Select Document Type",
+            ["Internship Offer", "NDA", "Invoice", "Contract", "Proposal"],
+            key="generated_type_select"
+        )
+
+        generated_folder = f"hvt_generator/generated/{selected_generated_type}"
+
+        try:
+            st.info(f"Loading generated files from: `{generated_folder}`")
+            blobs = list(bucket.list_blobs(prefix=generated_folder))
+
+            if blobs:
+                for blob in blobs:
+                    file_name = os.path.basename(blob.name)
+                    file_type, _ = mimetypes.guess_type(file_name)
+
+                    # Save to a temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_name)[-1]) as temp_file:
+                        blob.download_to_filename(temp_file.name)
+                        local_path = temp_file.name
+
+                    col1, col2 = st.columns([6, 1])
+                    with col1:
+                        st.markdown(f"📄 **{file_name}**")
+
+                        # Preview PDF
+                        if file_type == "application/pdf":
+                            st.markdown("Preview:")
+                            with open(local_path, "rb") as pdf_file:
+                                base64_pdf = base64.b64encode(pdf_file.read()).decode("utf-8")
+                                pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400" type="application/pdf"></iframe>'
+                                st.markdown(pdf_display, unsafe_allow_html=True)
+
+                        # Preview DOCX
+                        elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                            st.markdown("Preview:")
+                            try:
+                                from docx import Document
+
+                                doc = Document(local_path)
+                                preview_text = "\n".join(
+                                    para.text for para in doc.paragraphs if para.text.strip()
+                                )
+                                st.text_area("📄 DOCX Preview", preview_text, height=250)
+                            except Exception as e:
+                                st.warning(f"Couldn't preview DOCX: {e}")
+
+                    with col2:
+                        if st.button("🗑 Delete", key=f"delete_{blob.name}"):
+                            try:
+                                blob.delete()
+                                st.success(f"Deleted {blob.name}")
+                                st.experimental_rerun()
+                            except Exception as e:
+                                st.error(f"Failed to delete: {str(e)}")
+
+        except Exception as e:
+            st.error(f"Error listing files: {str(e)}")
+
+
 
 # Handle document types
 elif selected_option == "Internship Offer":
@@ -959,6 +1031,9 @@ elif selected_option == "Internship Offer":
 
 elif selected_option == "NDA":
     handle_nda()
+
+elif selected_option == "Invoice":
+    handle_invoice()
 
 elif selected_option == "Contract":
     handle_contract()

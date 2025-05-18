@@ -4,7 +4,7 @@ import pycountry
 import streamlit as st
 from nda_edit import nda_edit
 from docx_pdf_converter import main_converter
-from edit_proposal_cover_1 import EditTextFile
+from edit_proposal_cover_1 import replace_pdf_placeholders
 from merge_pdf import Merger
 import tempfile
 from firebase_conf import auth, rt_db, bucket, firestore_db
@@ -12,86 +12,134 @@ import pdfplumber
 from firebase_admin import storage
 import json
 import base64
+import random
 # import os
 # from datetime import datetime
 from google.cloud import storage, firestore
-
+from invoice_editor import invoice_edit
+from testimonial_page_edit import EditTextFile
+import re
 
 LOAD_LOCALLY = True
 
 
-def generate_download_link(file_path, filename):
-    with open(file_path, "rb") as f:
-        file_bytes = f.read()
-        b64 = base64.b64encode(file_bytes).decode()
-        href = f'<a href="data:application/pdf;base64,{b64}" download="{filename}">📥 Download Proposal PDF</a>'
-        st.markdown(href, unsafe_allow_html=True)
+def format_currency_amount(raw_price: str) -> str:
+    # Extract digits (optionally include decimal point)
+    match = re.search(r"\d+(?:\.\d+)?", raw_price)
+    if not match:
+        return "0"
+
+    number = float(match.group())
+    return f"{number:,.2f}" if '.' in match.group() else f"{int(number):,}"
 
 
-def save_generated_document_to_firebase(
-    file_path: str,
-    doc_type: str,
-    user_email: str,
-    firestore_db,
-    bucket
-):
-
-    if not os.path.exists(file_path):
-        st.error(f"File not found: {file_path}")
-        return
-    if isinstance(doc_type, list):
-        st.error("❌ Invalid doc_type: expected a string but got a list.")
-        return
-
-    doc_type_clean = str(doc_type).replace(' ', '_')
-
-    # Save to Firestore
+# def generate_download_link(file_path, filename):
+#     with open(file_path, "rb") as f:
+#         file_bytes = f.read()
+#         b64 = base64.b64encode(file_bytes).decode()
+#         href = f'<a href="data:application/pdf;base64,{b64}" download="{filename}">📥 Download Proposal PDF</a>'
+#         st.markdown(href, unsafe_allow_html=True)
 
 
+# def generate_download_link(file_path, filename, file_type, doc_type):
+#     with open(file_path, "rb") as f:
+#         file_bytes = f.read()
+#         b64 = base64.b64encode(file_bytes).decode()
+#         href = f'''
+#         <a href="data:application/pdf;base64,{b64}" download="{filename}"
+#            style="display: inline-block;
+#                   padding: 12px 24px;
+#                   background: linear-gradient(45deg, #2196F3, #00BCD4);
+#                   color: white;
+#                   text-decoration: none;
+#                   border-radius: 6px;
+#                   font-weight: bold;
+#                   font-family: sans-serif;
+#                   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+#                   transition: all 0.3s ease;
+#                   border: none;
+#                   cursor: pointer;">
+#            📥 Download {doc_type} {file_type}
+#         </a>
+#         '''
+#         st.markdown(href, unsafe_allow_html=True)
+
+
+def save_generated_file_to_firebase(local_file_path, doc_type, bucket):
     try:
-        filename = os.path.basename(file_path)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        user_safe = user_email.replace("@", "_at_").replace(".", "_dot_")
-        print(f"hvt_generator/generated/{doc_type.replace(' ', '_')}/{user_safe}_{timestamp}_{filename}")
+        from datetime import datetime
+        import os
 
-        # 🔄 New storage path: hvt_generator/generated/<doc_type>/
-        storage_path = f"hvt_generator/generated/{doc_type.replace(' ', '_')}/{user_safe}_{timestamp}_{filename}"
+        # Get filename from local path
+        filename = os.path.basename(local_file_path)
+
+        # Define storage path
+        storage_path = f"hvt_generator/generated/{doc_type}/{filename}"
 
         # Upload to Firebase Storage
         blob = bucket.blob(storage_path)
-        with open(file_path, "rb") as f:
-            blob.upload_from_file(f, content_type="application/pdf")
+        blob.upload_from_filename(local_file_path)
 
-        download_url = blob.generate_signed_url(
-            expiration=datetime.timedelta(days=365 * 5),
-            version="v4"
-        )
+        # Make it public or generate signed URL
+        public_url = blob.public_url
 
-        # Metadata
-        metadata = {
-            "filename": filename,
-            "doc_type": doc_type,
-            "generated_by": user_email,
-            "storage_path": storage_path,
-            "download_url": download_url,
-            "upload_timestamp": firestore.SERVER_TIMESTAMP,
-            "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        print(f"meta data {metadata}")
+        st.success(f"✅ File uploaded to Firebase")
+        # st.markdown(f"[📁 View File]({public_url})")
 
-        # 🔄 New Firestore path: hvt_generator/generated/<doc_type>/
-        # firestore_db.collection("hvt_generator").document("generated") \
-        #     .collection(str(doc_type).replace(' ', '_')).add(metadata)
-
-        firestore_db.collection("hvt_generator").document("generated") \
-            .collection(doc_type_clean).add(metadata)
-
-        st.success("✅ Document saved to Firebase Storage.")
-        st.markdown(f"🔗 [Access Saved File]({download_url})")
+        return storage_path, public_url
 
     except Exception as e:
-        st.error(f"❌ Failed to upload document: {str(e)}")
+        st.error(f"❌ Failed to upload file: {e}")
+        return None, None
 
+
+# def generate_download_link(file_path, filename, file_type, doc_type):
+#     with open(file_path, "rb") as f:
+#         file_bytes = f.read()
+#         b64 = base64.b64encode(file_bytes).decode()
+#         href = f'''
+#         <a href="data:application/pdf;base64,{b64}" download="{filename}"
+#            style="display: inline-block;
+#                   padding: 12px 24px;
+#                   background: linear-gradient(45deg, #2196F3, #00BCD4);
+#                   color: white;
+#                   text-decoration: none;
+#                   border-radius: 6px;
+#                   font-weight: bold;
+#                   font-family: sans-serif;
+#                   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+#                   transition: all 0.3s ease;
+#                   border: none;
+#                   cursor: pointer;">
+#            📥 Download {doc_type} {file_type}
+#         </a>
+#         '''
+#         st.markdown(href, unsafe_allow_html=True)
+
+
+def generate_download_link(file_path, filename, file_type, doc_type):
+    with open(file_path, "rb") as f:
+        file_bytes = f.read()
+        b64 = base64.b64encode(file_bytes).decode()
+
+    href = f'''
+    <a href="data:application/pdf;base64,{b64}" download="{filename}"
+       style="display: inline-block;
+              padding: 12px 24px;
+              background: linear-gradient(45deg, #2196F3, #00BCD4);
+              color: white;
+              text-decoration: none;
+              border-radius: 6px;
+              font-weight: bold;
+              font-family: sans-serif;
+              box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+              transition: all 0.3s ease;
+              border: none;
+              cursor: pointer;">
+       📥 Download {doc_type} {file_type}
+    </a>
+    '''
+    st.markdown(href, unsafe_allow_html=True)
 
 
 def pdf_view(file_input):
@@ -324,8 +372,19 @@ def handle_internship_offer():
 
                 with col1:
                     if os.path.exists(pdf_output):
-                        generate_download_link(pdf_output,
-                                               f"{file_prefix} Offer Letter.pdf")
+                        # generate_download_link(pdf_output,
+                        #                        f"{file_prefix} Offer Letter.pdf", "PDF", "Internship")
+                        #
+                        if st.button("✅ Confirm and Upload Contract PDF", key="upload_pdf"):
+                            storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Internship",
+                                                                                       bucket=bucket)
+
+                            st.success("Now you can download the file:")
+                            # Step 2: Show download link only after upload
+                            generate_download_link(pdf_output,
+                                                   f"{file_prefix} Offer Letter.pdf",
+                                                   "PDF", "Internship")
+
                         # with open(pdf_output, "rb") as f_pdf:
                         #     st.download_button(
                         #         "⬇️ Download PDF",
@@ -338,8 +397,19 @@ def handle_internship_offer():
 
                 with col2:
                     if os.path.exists(docx_output):
-                        generate_download_link(docx_output,
-                                               f"{file_prefix} Offer Letter.docx")
+                        # generate_download_link(docx_output,
+                        #                        f"{file_prefix} Offer Letter.docx", "DOCX", "Internship")
+
+                        if st.button("✅ Confirm and Upload Contract DOCX", key="upload_docx"):
+                            storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Internship",
+                                                                                       bucket=bucket)
+
+                            st.success("Now you can download the file:")
+                            # Step 2: Show download link only after upload
+                            generate_download_link(docx_output,
+                                                   f"{file_prefix} Offer Letter.docx",
+                                                   "DOCX", "Internship")
+
                         # with open(docx_output, "rb") as f_docx:
                         #     st.download_button(
                         #         "⬇️ Download DOCX",
@@ -434,7 +504,7 @@ def handle_nda():
                     return
 
                 # Download the template file from Firebase Storage
-                bucket = storage.bucket()
+                # bucket = storage.bucket()
                 blob = bucket.blob(template_data['storage_path'])
 
                 # Create a temporary file for the template
@@ -472,8 +542,20 @@ def handle_nda():
             col1, col2 = st.columns(2)
 
             with col1:
-                generate_download_link(pdf_output,
-                                       f"{st.session_state.nda_data['client_company_name']} NDA.pdf")
+                # generate_download_link(pdf_output,
+                #                        f"{st.session_state.nda_data['client_company_name']} NDA.pdf", "PDF", "NDA")
+                #
+                if st.button("✅ Confirm and Upload Contract PDF", key="upload_pdf"):
+                    storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="NDA",
+                                                                               bucket=bucket)
+
+                    st.success("Now you can download the file:")
+                    # Step 2: Show download link only after upload
+                    generate_download_link(pdf_output,
+                                           f"{st.session_state.nda_data['client_company_name']} NDA.pdf",
+                                           "PDF", "NDA")
+
+
                 # with open(pdf_output, "rb") as f_pdf:
                 #     st.download_button(
                 #         "⬇️ Download PDF",
@@ -483,8 +565,20 @@ def handle_nda():
                 #     )
 
             with col2:
-                generate_download_link(docx_output,
-                                       f"{st.session_state.nda_data['client_company_name']} NDA.docx")
+                # generate_download_link(docx_output,
+                #                        f"{st.session_state.nda_data['client_company_name']} NDA.docx", "DOCX", "NDA")
+                #
+                if st.button("✅ Confirm and Upload Contract DOCX", key="upload_docx"):
+                    storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="NDA",
+                                                                               bucket=bucket)
+
+                    st.success("Now you can download the file:")
+                    # Step 2: Show download link only after upload
+                    generate_download_link(docx_output,
+                                           f"{st.session_state.nda_data['client_company_name']} NDA.docx",
+                                           "DOCX", "NDA")
+
+
                 # with open(docx_output, "rb") as f_docx:
                 #     st.download_button(
                 #         "⬇️ Download DOCX",
@@ -496,6 +590,397 @@ def handle_nda():
         # Clean up temp files
         try:
             import os
+            os.unlink(template_path)
+            os.unlink(pdf_output)
+            os.unlink(docx_output)
+        except:
+            pass
+
+
+def handle_invoice():
+    st.title("📄 Invoice Generator")
+
+    # Initialize session state for multi-page form
+    if 'invoice_form_step' not in st.session_state:
+        st.session_state.invoice_form_step = 1
+        st.session_state.invoice_data = {}
+
+        st.session_state.payment_items = []
+        st.session_state.show_description = False
+
+    # Currency options
+    currency_options = {
+        "USD": {"label": "USD – US Dollar", "sign": "$", "name": "US Dollar"},
+        "EUR": {"label": "EUR – Euro", "sign": "€", "name": "Euro"},
+        "GBP": {"label": "GBP – British Pound", "sign": "£", "name": "British Pound"},
+        "INR": {"label": "INR – Indian Rupee", "sign": "₹", "name": "Indian Rupee"},
+        "NGN": {"label": "NGN – Nigerian Naira", "sign": "₦", "name": "Nigerian Naira"},
+        "CAD": {"label": "CAD – Canadian Dollar", "sign": "CA$", "name": "Canadian Dollar"},
+        "AUD": {"label": "AUD – Australian Dollar", "sign": "A$", "name": "Australian Dollar"},
+        "JPY": {"label": "JPY – Japanese Yen", "sign": "¥", "name": "Japanese Yen"},
+    }
+    if "invoice_currency" not in st.session_state:
+        st.session_state.invoice_currency = {}
+
+    # Step 1: Client and Company Information
+    if st.session_state.invoice_form_step == 1:
+        with st.form("invoice_form_step1"):
+            st.subheader("Client & Company Information")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                invoice_no = st.text_input("Invoice Number", placeholder="12234")
+                date = st.date_input("Invoice Date", value=datetime.now().date())
+                client_name = st.text_input("Client Name", placeholder="Ojo Alaba")
+                client_company_name = st.text_input("Client Company Name", placeholder="Yoruba Ltd")
+                client_phone = st.text_input("Client Phone", placeholder="+1 234 56000")
+                client_email = st.text_input("Client Email", placeholder="unfresh@email.com")
+
+            with col2:
+                company_number = st.text_input("Your Company Phone", placeholder="+1 234 56000")
+                company_gst = st.text_input("Your Company GST", placeholder="9000")
+                client_address = st.text_area("Client Address",
+                                              placeholder="Lead Developer Street, Anthony, Riyah Turkey")
+                project_name = st.text_input("Project Name", placeholder="Tolu Scrapper")
+
+            currency_shortcode = st.selectbox(
+                "Currency Code",
+                options=list(currency_options.keys()),
+                format_func=lambda code: currency_options[code]["label"],  # Show full name
+                index=0
+            )
+
+            currency_sign = currency_options[currency_shortcode]["sign"]
+            currency_name = currency_options[currency_shortcode]["name"]
+            currency_data = {
+                "currency_code": currency_shortcode,
+                "currency_sign": currency_sign,
+                "currency_name": currency_name
+            }
+            print("here")
+            print(f"currency data {currency_data}")
+            print(f"currency data {currency_data}")
+            print(f"currency data {currency_data}")
+            st.session_state.invoice_currency = currency_data
+
+            if st.form_submit_button("Continue to Items"):
+
+                print(f"Invoice currency session state: {st.session_state.invoice_currency}")
+                if not client_name.strip():
+                    st.error("Please enter client name")
+                    st.stop()
+
+                st.session_state.invoice_data = {
+                    "date": date.strftime("%B %d, %Y"),
+                    "client_name": client_name.strip(),
+                    "client_company_name": client_company_name.strip(),
+                    "client_phone": client_phone.strip(),
+                    "company_number": company_number.strip(),
+                    "company_gst": company_gst.strip(),
+                    "client_address": client_address.strip(),
+                    "client_email": client_email.strip(),
+                    "project_name": project_name.strip(),
+                    "invoice_no": invoice_no,
+                    "payment_currency": f""
+                                        f"{st.session_state.invoice_currency['currency_code']} "
+                                        f"{st.session_state.invoice_currency['currency_sign']}"
+
+                }
+                st.session_state.invoice_form_step = 2
+                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
+    # Step 2
+    elif st.session_state.invoice_form_step == 2:
+
+        st.button("← Back", on_click=lambda: setattr(st.session_state, 'invoice_form_step', 1))
+
+        if 'show_schedule' not in st.session_state:
+            st.session_state.show_schedule = False
+
+        # Display payment items
+        if st.session_state.payment_items:
+            st.markdown("### 💰 Current Payment Items")
+            for idx, item in enumerate(st.session_state.payment_items):
+                with st.container():
+                    col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 2, 1])
+                    with col1:
+                        st.markdown(f"**{item['s_no']}.**")
+
+                    with col2:
+                        st.markdown(f"**{item['description']}.**")
+
+                    with col3:
+                        st.markdown(f"**{item['hns_code']}.**")
+
+                    with col4:
+                        st.markdown(f"**{item['price']}.**")
+
+                    with col5:
+                        if st.button("❌", key=f"remove_{idx}"):
+                            st.session_state.payment_items.pop(idx)
+                            st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
+        # Add new item form
+        with st.form("invoice_form_step2"):
+            st.subheader("➕ Add New Payment Description")
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col1:
+                s_no = st.number_input("S.No", min_value=1, value=len(st.session_state.payment_items) + 1)
+            with col2:
+                description = st.text_input("Description", placeholder="Project Setup Fee")
+            with col3:
+                price = st.text_input("Amount", placeholder="10000")
+
+            hns_code = st.text_input("HSN Code", placeholder="2345666")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                add_btn = st.form_submit_button("➕ Add")
+            with col2:
+                schedule_toggle = st.form_submit_button(
+                    "📅 Add Payment Schedule" if not st.session_state.show_schedule else "❌ Cancel Payment Schedule")
+
+            if add_btn:
+                if not description.strip():
+                    st.error("Please enter item description.")
+                    st.stop()
+                if not price.strip():
+                    st.error("Please enter item price.")
+                    st.stop()
+                new_item = {
+                    "s_no": str(s_no),
+                    "description": description.strip(),
+                    "hns_code": hns_code.strip(),
+                    "price": f"{st.session_state.invoice_currency['currency_sign']}{format_currency_amount(price.strip())}",
+                    "additional_desc": ""
+                }
+                st.session_state.payment_items.append(new_item)
+                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
+            if schedule_toggle:
+                st.session_state.show_schedule = not st.session_state.show_schedule
+                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
+        # Payment Schedule Section
+        if st.session_state.show_schedule:
+            st.subheader("📅 Payment Schedule")
+
+            if 'payment_schedule' not in st.session_state:
+                st.session_state.payment_schedule = []
+
+            if st.session_state.payment_schedule:
+                st.markdown("#### Current Schedule")
+                for idx, item in enumerate(st.session_state.payment_schedule):
+                    with st.container():
+                        col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
+                        with col1:
+                            st.markdown(f"**{item['s_no']}.**")
+                        with col2:
+                            st.markdown(f"**{item['schedule']}**")
+                        with col3:
+                            st.markdown(f"**{item['price']}**")
+                        with col4:
+                            if st.button("❌", key=f"remove_schedule_{idx}"):
+                                st.session_state.payment_schedule.pop(idx)
+                                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
+            with st.form("payment_schedule_form"):
+                col1, col2, col3 = st.columns([1, 3, 1])
+                with col1:
+                    schedule_s_no = st.number_input("S.No.", min_value=1,
+                                                    value=len(st.session_state.payment_schedule) + 1, key="schedule_no")
+                with col2:
+                    schedule_desc = st.text_input("Schedule Description", placeholder="Upon signing",
+                                                  key="schedule_desc")
+                with col3:
+                    schedule_price = st.text_input("Amount", placeholder="10000", key="schedule_price")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    add_schedule_btn = st.form_submit_button("➕ Add")
+                with col2:
+                    done_btn = st.form_submit_button("✅ Done with Schedule")
+
+                if add_schedule_btn:
+                    if not schedule_desc.strip():
+                        st.error("Please enter schedule description.")
+                        st.stop()
+                    if not schedule_price.strip():
+                        st.error("Please enter schedule amount.")
+                        st.stop()
+                    new_schedule = {
+                        "s_no": str(schedule_s_no),
+                        "schedule": schedule_desc.strip(),
+                        "price": f"{st.session_state.invoice_currency['currency_sign']}{format_currency_amount(schedule_price.strip())}"
+                    }
+                    st.session_state.payment_schedule.append(new_schedule)
+                    st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
+                if done_btn:
+                    st.session_state.show_schedule = False
+                    st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+
+        # Proceed to Preview
+        if st.session_state.payment_items:
+            if st.button("➡ Continue to Preview"):
+                st.session_state.invoice_data["payment_description"] = st.session_state.payment_items
+                if hasattr(st.session_state, 'payment_schedule') and st.session_state.payment_schedule:
+                    st.session_state.invoice_data["payment_schedule"] = st.session_state.payment_schedule
+                st.session_state.invoice_form_step = 3
+                st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
+        else:
+            st.warning("⚠️ Add at least one Payment Description before continuing.")
+
+    # Step 3: Preview and Download
+    elif st.session_state.invoice_form_step == 3:
+        st.button("← Back to Items", on_click=lambda: setattr(st.session_state, 'invoice_form_step', 2))
+
+        with st.spinner("Generating invoice..."):
+            # Prepare context for template
+            import re
+            total = sum(
+                float(re.sub(r"[^\d.]", "", item["price"]))
+                for item in st.session_state.payment_items
+                if re.search(r"\d", item["price"])
+            )
+            context = {
+                **st.session_state.invoice_data,
+                "payment_description": st.session_state.payment_items,
+                "sum": f"{st.session_state.invoice_currency['currency_sign']}{total}"
+            }
+
+            # Add amount in words
+            from num2words import num2words
+            def extract_numeric(price_str):
+                match = re.search(r"[\d,]+(?:\.\d+)?", price_str)
+                if not match:
+                    return 0.0
+                number_str = match.group().replace(",", "")
+                return float(number_str)
+
+            total_amount = sum(extract_numeric(item['price']) for item in st.session_state.payment_items)
+
+            # total_amount = sum(float(item['price'].replace(',', '')) for item in st.session_state.payment_items)
+            context["sum_to_word"] = f"{num2words(abs(total_amount), to='currency').title()} {st.session_state.invoice_currency['currency_name']} only."
+
+            # Get template from Firestore
+            doc_type = "Invoice"
+            try:
+                template_ref = firestore_db.collection("hvt_generator").document(doc_type)
+                templates = template_ref.collection("templates").order_by("order_number").limit(1).get()
+
+                if not templates:
+                    st.error("No invoice templates found in the database")
+                    return
+
+                template_doc = templates[0]
+                template_data = template_doc.to_dict()
+
+                if template_data.get('visibility', 'Private') != 'Public':
+                    st.error("This invoice template is not currently available")
+                    return
+
+                if template_data.get(
+                        'file_type') != 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+                    st.error("Template is not a valid Word document (.docx)")
+                    return
+
+                if 'storage_path' not in template_data:
+                    st.error("Template storage path not found in the database")
+                    return
+
+                # Download the template
+                blob = bucket.blob(template_data['storage_path'])
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_template:
+                    blob.download_to_filename(temp_template.name)
+                    template_path = temp_template.name
+
+            except Exception as e:
+                st.error(f"Error fetching template: {str(e)}")
+                return
+
+            # Generate temporary files
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf, \
+                    tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_docx:
+
+                pdf_output = temp_pdf.name
+                docx_output = temp_docx.name
+
+                # Use the downloaded template
+                invoice_edit(template_path, docx_output, context)
+                main_converter(docx_output, pdf_output)
+
+            # Preview section
+            st.subheader("Invoice Preview")
+
+            # Client info
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.write(f"**Client Name:** {context['client_name']}")
+                st.write(f"**Company:** {context['client_company_name']}")
+                st.write(f"**Address:** {context['client_address']}")
+                st.write(f"**Phone:** {context['client_phone']}")
+                st.write(f"**Email:** {context['client_email']}")
+
+            with col2:
+                st.write(f"**Invoice #:** {context['invoice_no']}")
+                st.write(f"**Date:** {context['date']}")
+                st.write(f"**Project:** {context['project_name']}")
+                st.write(f"**GST:** {context['company_gst']}")
+                st.write(f"**Currency:** {context['payment_currency']} ")
+
+            with col3:
+                with st.expander("View Invoice Data (JSON)", expanded=True):
+                    st.json(st.session_state.invoice_data)
+
+            # Total
+            # st.write(f"**Total Amount:** {context['payment_currency']['sign']}{context['sum']:,.2f}")
+            st.write(f"**Amount in Words:** {context['sum_to_word']}")
+
+            # PDF preview
+            pdf_view(pdf_output)
+
+            # Download buttons
+            st.subheader("Download Invoice")
+            col1, col2 = st.columns(2)
+            file_prefix = f"Invoice {context['client_name']} {context['invoice_no']}"
+
+            with col1:
+                # generate_download_link(
+                #     pdf_output,
+                #     f"{file_prefix}.pdf",
+                #     "PDF", "Invoice"
+                # )
+
+                if st.button("✅ Confirm and Upload Contract PDF",  key="upload_pdf"):
+                    storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Invoice",
+                                                                               bucket=bucket)
+
+                    st.success("Now you can download the file:")
+                    # Step 2: Show download link only after upload
+                    generate_download_link(pdf_output,
+                                           f"{file_prefix}.pdf",
+                                           "PDF", "Invoice")
+
+            with col2:
+                # generate_download_link(
+                #     docx_output,
+                #     f"{file_prefix}.docx",
+                #     "DOCX", "Invoice"
+                # )
+                if st.button("✅ Confirm and Upload Contract DOCX",  key="upload_docx"):
+                    storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Invoice",
+                                                                               bucket=bucket)
+
+                    st.success("Now you can download the file:")
+                    # Step 2: Show download link only after upload
+                    generate_download_link(docx_output,
+                                           f"{file_prefix}.docx",
+                                           "DOCX", "Invoice")
+
+        # Clean up temp files
+        try:
             os.unlink(template_path)
             os.unlink(pdf_output)
             os.unlink(docx_output)
@@ -577,7 +1062,7 @@ def handle_contract():
                     return
 
                 # Download the template file from Firebase Storage
-                bucket = storage.bucket()
+                # bucket = storage.bucket()
                 blob = bucket.blob(template_data['storage_path'])
 
                 # Create a temporary file for the template
@@ -616,8 +1101,20 @@ def handle_contract():
             col1, col2 = st.columns(2)
 
             with col1:
-                generate_download_link(pdf_output,
-                                       f"{st.session_state.contract_data['client_company_name']} Contract.pdf")
+                # generate_download_link(pdf_output,
+                #                        f"{st.session_state.contract_data['client_company_name']} "
+                #                        f"Contract.pdf",
+                #                        "PDF", "Contract")
+                if st.button("✅ Confirm and Upload Contract PDF", key="upload_pdf"):
+                    storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Contract",
+                                                                               bucket=bucket)
+
+                    st.success("Now you can download the file:")
+                    # Step 2: Show download link only after upload
+                    generate_download_link(pdf_output,
+                                           f"{st.session_state.contract_data['client_company_name']} Contract.pdf",
+                                           "PDF", "Contract")
+
                 # with open(pdf_output, "rb") as f_pdf:
                 #     st.download_button(
                 #         "⬇️ Download PDF",
@@ -627,7 +1124,20 @@ def handle_contract():
                 #     )
 
             with col2:
-                generate_download_link(docx_output, f"{st.session_state.contract_data['client_company_name']} Contract.docx")
+                # generate_download_link(docx_output,
+                #                        f"{st.session_state.contract_data['client_company_name']} Contract.docx",
+                #                        "DOCX", "Contract")
+                # Step 1: Confirm and upload
+                if st.button("✅ Confirm and Upload Contract DOCX", key="upload_docx"):
+                    storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Contract",
+                                                                               bucket=bucket)
+
+                    st.success("Now you can download the file:")
+                    # Step 2: Show download link only after upload
+                    generate_download_link(docx_output,
+                                           f"{st.session_state.contract_data['client_company_name']} Contract.docx",
+                                           "DOCX", "Contract")
+
                 # with open(docx_output, "rb") as f_docx:
                 #     st.download_button(
                 #         "⬇️ Download DOCX",
@@ -644,53 +1154,6 @@ def handle_contract():
             os.unlink(docx_output)
         except Exception as e:
             st.warning(f"Error cleaning up temporary files: {str(e)}")
-
-
-# def fetch_proposal_templates_to_temp_dir(firestore_db, bucket):
-#     base_temp_dir = tempfile.mkdtemp(prefix="proposal_templates_")
-#
-#     templates_ref = firestore_db.collection("hvt_generator").document("Proposal").collection("templates")
-#     templates = templates_ref.stream()
-#
-#     # Display name → normalized folder key
-#     subdir_map = {
-#         "Cover Templates": "cover_templates",
-#         "Index Templates": "index_templates",
-#         "Page 3 to Page 6": "p3_to_p6_templates",
-#         "Business Requirements Templates": "br_templates",
-#         "Page 14 optional": "p_14_templates",
-#         "Content Templates": "content_templates"
-#     }
-#
-#     folder_paths = {}
-#
-#     for doc in templates:
-#         data = doc.to_dict()
-#
-#         if not data.get("storage_path") or not data.get("template_part"):
-#             continue
-#
-#         folder_key = subdir_map.get(data["template_part"], "other_templates")
-#         target_dir = os.path.join(base_temp_dir, folder_key)
-#         os.makedirs(target_dir, exist_ok=True)
-#
-#         # Track path
-#         folder_paths[folder_key] = target_dir
-#
-#         filename = f"{data.get('original_name', doc.id)}"
-#         if not filename.lower().endswith(".pdf"):
-#             filename += ".pdf"
-#         target_path = os.path.join(target_dir, filename)
-#
-#         try:
-#             blob = bucket.blob(data["storage_path"])
-#             blob.download_to_filename(target_path)
-#         except Exception as e:
-#             print(f"❌ Failed to download {data['storage_path']}: {e}")
-#
-#     return folder_paths
-#
-
 
 
 def fetch_proposal_templates_to_temp_dir(firestore_db, bucket):
@@ -740,9 +1203,6 @@ def fetch_proposal_templates_to_temp_dir(firestore_db, bucket):
     return folder_paths
 
 
-import os
-import streamlit as st
-
 def fetch_path_from_temp_dir(sub_folder, selected_template, folder_paths):
     try:
         # Ensure required input
@@ -773,8 +1233,6 @@ def fetch_path_from_temp_dir(sub_folder, selected_template, folder_paths):
         st.error(f"❌ An error occurred while fetching the template path: {str(e)}")
         return None
 
-
-from datetime import datetime
 
 def get_proposal_template_details(firestore_db):
 
@@ -883,6 +1341,7 @@ def handle_proposal():
 
     elif st.session_state.proposal_form_step == 2:
         st.subheader("Select Cover page")
+        print(f"st.session_state.proposal_data: {st.session_state.proposal_data}")
         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 1))
 
         cover_templates = [tpl for tpl in all_templates if tpl["proposal_section_type"] == "cover_page"]
@@ -915,30 +1374,47 @@ def handle_proposal():
                 return
 
             # Ensure output path is valid in Streamlit Cloud
-            temp_dir = tempfile.gettempdir()
-            output_pdf = os.path.join(temp_dir, "modified_cover.pdf")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_img:
+                temp_img_path = temp_img.name
+            # temp_dir = tempfile.gettempdir()
+            # output_pdf = os.path.join(temp_dir, "modified_cover.pdf")
 
-            pdf_editor = EditTextFile(template_path)
+            # pdf_editor = EditTextFile(template_path)
+            #
+            # modifications = {
+            #     "Name :": f": {st.session_state.proposal_data['client_name']}",
+            #     "Email :": f": {st.session_state.proposal_data['email']}",
+            #     "Phone :": f": {st.session_state.proposal_data['phone']}",
+            #     "Country: ": f": {st.session_state.proposal_data['country']}",
+            #     "Date": f"{st.session_state.proposal_data['proposal_date']}"
+            # }
 
-            modifications = {
-                "Name:": f": {st.session_state.proposal_data['client_name']}",
-                "Email:": f": {st.session_state.proposal_data['email']}",
-                "Phone": f": {st.session_state.proposal_data['phone']}",
-                "Country": f": {st.session_state.proposal_data['country']}",
-                "Date": f"{st.session_state.proposal_data['proposal_date']}"
-            }
+            replace_pdf_placeholders(
+                input_path=template_path,
+                output_path=temp_img_path,
+                replacements={
+                    "{ client_name }": f"{st.session_state.proposal_data['client_name']}",
+                    "{ client_email }": f"{st.session_state.proposal_data['email']}",
+                    "{ client_phone }": f"{st.session_state.proposal_data['phone']}",
+                    "{ client_country }": f"{st.session_state.proposal_data['country']}",
+                    "{ date }": f"{st.session_state.proposal_data['proposal_date']}"
+                },
+                y_offset=19
+            )
 
-            pdf_editor.modify_pdf_fields(output_pdf, modifications, 8)
+            # print(f"modifications: {modifications}")
+            #
+            # pdf_editor.modify_pdf_fields(temp_img_path, modifications, 8)
 
             # Preview
-            if os.path.exists(output_pdf):
-                pdf_view(output_pdf)
+            if os.path.exists(temp_img_path):
+                pdf_view(temp_img_path)
             else:
                 st.warning("Preview not available")
 
         with st.form("proposal_form_step2"):
             if st.form_submit_button("Next: Select Business Requirement Page"):
-                st.session_state.proposal_data["cover_template"] = output_pdf
+                st.session_state.proposal_data["cover_template"] = temp_img_path
                 st.session_state.proposal_form_step = 3
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
@@ -973,6 +1449,8 @@ def handle_proposal():
         col1, col2 = st.columns([1, 2])
 
         with col1:
+
+
             selected_br_name = st.selectbox(
                 "Choose a business requirements page style:",
                 options=list(br_options.keys()),
@@ -982,36 +1460,85 @@ def handle_proposal():
 
             selected_br_template = br_options[selected_br_name]
             # st.session_state.selected_br = selected_br_name
+        br_temp_dir = folder_paths.get("business_requirement")
+        if br_temp_dir:
+            # Find the matching file in the temp directory
+            expected_filename = selected_br_template["original_name"]
+            if not expected_filename.lower().endswith(".pdf"):
+                expected_filename += ".pdf"
 
-        with col2:
-            # Get the path to the downloaded template in temp directory
-            br_temp_dir = folder_paths.get("business_requirement")
-            if br_temp_dir:
-                # Find the matching file in the temp directory
-                expected_filename = selected_br_template["original_name"]
-                if not expected_filename.lower().endswith(".pdf"):
-                    expected_filename += ".pdf"
+            template_path = os.path.join(br_temp_dir, expected_filename)
 
-                template_path = os.path.join(br_temp_dir, expected_filename)
+            if os.path.exists(template_path):
+                modifications = {
+                    "{ client_name }": (f"    {st.session_state.proposal_data['client_name']}", 0, 7),
+                    "{ date }": (f"{st.session_state.proposal_data['proposal_date']}", -30, 0)
+                }
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_br:
+                    temp_br_path = temp_br.name
+                # temp_dir = tempfile.gettempdir()
+                # output_pdf = os.path.join(temp_dir, "modified_testimonials.pdf")
+                editor = EditTextFile(template_path)
+                editor.modify_pdf_fields(temp_br_path, modifications)
 
-                if os.path.exists(template_path):
-                    st.session_state.selected_br = template_path
-                    st.session_state.proposal_data["br_template"] = st.session_state.selected_br
-                    try:
-                        br_num_pages = selected_br_template.get("num_pages")
-                        st.write(f"This BR template has {br_num_pages} page(s)")
-                    except Exception as e:
-                        st.warning(f"⚠️ Could not read number of pages of Template: {str(e)}")
-                        st.stop()
+                st.session_state.selected_br = temp_br_path
+                st.session_state.proposal_data["br_template"] = st.session_state.selected_br
+                try:
+                    br_num_pages = selected_br_template.get("num_pages")
+                    st.write(f"This BR template has {br_num_pages} page(s)")
+                except Exception as e:
+                    st.warning(f"⚠️ Could not read number of pages of Template: {str(e)}")
+                    st.stop()
 
-                    specific_templates = get_specific_templates(all_templates, br_num_pages)
+                specific_templates = get_specific_templates(all_templates, br_num_pages)
 
-                    pdf_view(template_path)
-                else:
-                    st.error(f"Template file not found: {template_path}")
+                pdf_view(temp_br_path)
             else:
-                st.error("Business requirement templates directory not found")
-            # pdf_view(br_options[selected_br_name])
+                st.error(f"Template file not found: {template_path}")
+        else:
+            st.error("Business requirement templates directory not found")
+        # pdf_view(br_options[selected_br_name])
+
+        # with col2:
+        #     # Get the path to the downloaded template in temp directory
+        #     br_temp_dir = folder_paths.get("business_requirement")
+        #     if br_temp_dir:
+        #         # Find the matching file in the temp directory
+        #         expected_filename = selected_br_template["original_name"]
+        #         if not expected_filename.lower().endswith(".pdf"):
+        #             expected_filename += ".pdf"
+        #
+        #         template_path = os.path.join(br_temp_dir, expected_filename)
+        #
+        #         if os.path.exists(template_path):
+        #             modifications = {
+        #                 "{ client_name }": (f"    {st.session_state.proposal_data['client_name']}", 0, 7),
+        #                 "{ date }": (f"{st.session_state.proposal_data['proposal_date']}", -30, 0)
+        #             }
+        #             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_br:
+        #                 temp_br_path = temp_br.name
+        #             # temp_dir = tempfile.gettempdir()
+        #             # output_pdf = os.path.join(temp_dir, "modified_testimonials.pdf")
+        #             editor = EditTextFile(template_path)
+        #             editor.modify_pdf_fields(temp_br_path, modifications)
+        #
+        #             st.session_state.selected_br = temp_br_path
+        #             st.session_state.proposal_data["br_template"] = st.session_state.selected_br
+        #             try:
+        #                 br_num_pages = selected_br_template.get("num_pages")
+        #                 st.write(f"This BR template has {br_num_pages} page(s)")
+        #             except Exception as e:
+        #                 st.warning(f"⚠️ Could not read number of pages of Template: {str(e)}")
+        #                 st.stop()
+        #
+        #             specific_templates = get_specific_templates(all_templates, br_num_pages)
+        #
+        #             pdf_view(temp_br_path)
+        #         else:
+        #             st.error(f"Template file not found: {template_path}")
+        #     else:
+        #         st.error("Business requirement templates directory not found")
+        #     # pdf_view(br_options[selected_br_name])
 
         with st.form("proposal_form_step4"):
             if st.form_submit_button("Next: Preview Proposal"):
@@ -1070,6 +1597,7 @@ def handle_proposal():
                 # Testimonials
                 testimonials = st.session_state.proposal_data.get("testimonials")
                 if testimonials and os.path.exists(testimonials):
+
                     merger_files.append(testimonials)
                 else:
                     st.info("Testimonial Template for the selected BR page count is unavailable.")
@@ -1132,25 +1660,35 @@ def handle_proposal():
         st.markdown("#### ⬇️ Download Final Proposal")
         download_col1, download_col2 = st.columns([2, 1], gap="medium")
 
+        # query_params = st.experimental_get_query_params()
+        # upload_trigger = query_params.get("upload_trigger", ["0"])[0] == "1"
+        #
+        # with download_col1:
+        #     default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', ' ')} Proposal.pdf"
+        #
+        #     # generate_download_link("merged_output.pdf", default_filename, "PDF", "Proposal")
+        #     generate_download_link("merged_output.pdf", default_filename,
+        #                            "PDF", "Proposal")
+        #     if upload_trigger:
+        #         save_generated_file_to_firebase("merged_output.pdf", doc_type="Proposal", bucket=bucket)
+        #         # Reset trigger to prevent multiple uploads
+        #         st.experimental_set_query_params(upload_trigger="0")
         with download_col1:
-            default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', ' ')} Proposal.pdf"
-            generate_download_link("merged_output.pdf", default_filename)
-            # save_generated_document_to_firebase(
-            #     file_path="merged_output.pdf",
-            #     doc_type="Proposal",
-            #     user_email=st.secrets["custom"]["ADMIN_EMAILS"],
-            #     firestore_db=firestore_db,
-            #     bucket=bucket
-            # )
+            default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', '_')} Proposal.pdf"
 
-            # with open("merged_output.pdf", "rb") as f:
-            #     st.download_button(
-            #         label="📥 Download Proposal PDF",
-            #         data=f,
-            #         file_name=default_filename,
-            #         mime="application/pdf",
-            #         help="Click to download the final merged proposal document."
-            #     )
+            # Step 1: Confirm and upload
+            if st.button("✅ Confirm and Upload Proposal"):
+                storage_path, public_url = save_generated_file_to_firebase("merged_output.pdf", doc_type="Proposal",
+                                                                           bucket=bucket)
+                st.success("Now you can download the file:")
+                # Step 2: Show download link only after upload
+                generate_download_link("merged_output.pdf", default_filename, "PDF", "Proposal")
+
+            # default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', ' ')} Proposal.pdf"
+            # generate_download_link("merged_output.pdf", default_filename,
+            #                        "PDF", "Proposal")
+            # save_generated_file_to_firebase("merged_output.pdf", doc_type="Proposal", bucket=bucket)
+
 
         with download_col2:
             if st.button("🔁 Start Over"):
@@ -1161,419 +1699,4 @@ def handle_proposal():
                         del st.session_state[key]
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def handle_proposal():
-#     import os
-#     st.title("📄 Proposal Form")
-#
-#     # Initialize session state for multi-page form
-#     if 'proposal_form_step' not in st.session_state:
-#         st.session_state.proposal_form_step = 1
-#         st.session_state.proposal_data = {}
-#
-#     folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
-#
-#     # Step 1: Basic Information
-#     if st.session_state.proposal_form_step == 1:
-#         with st.form("proposal_form_step1"):
-#             st.subheader("Client Information")
-#             name = st.text_input("Client Name / Company Name")
-#             # company = st.text_input("Company Name")
-#             email = st.text_input("Email")
-#             phone = st.text_input("Phone")
-#             countries = sorted([country.name for country in pycountry.countries])
-#             country = st.selectbox("Select Country", countries)
-#             # st.subheader("Proposal Details")
-#             # project_name = st.text_input("Project Name")
-#             proposal_date = st.date_input("Proposal Date")
-#             # validity_days = st.number_input("Proposal Validity (Days)", min_value=1, max_value=365, value=30)
-#
-#             if st.form_submit_button("Next: Select Cover Page"):
-#                 st.session_state.proposal_data = {
-#                     "client_name": name,
-#                     # "company_name": company,
-#                     "email": email,
-#                     "phone": phone,
-#                     "country": country,
-#                     # "project_name": project_name,
-#                     "proposal_date": proposal_date.strftime("%B %d, %Y"),
-#                     # "validity_days": validity_days,
-#                     # "valid_until": (proposal_date + timedelta(days=validity_days)).strftime("%B %d, %Y")
-#                 }
-#                 st.session_state.proposal_form_step = 2
-#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-#
-#
-#     elif st.session_state.proposal_form_step == 2:
-#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 1))
-#
-#         # Fetch templates once (move outside the form to prevent refetching on every interaction)
-#         folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
-#         cover_templates_dir = folder_paths.get("cover_templates")
-#
-#         cover_options = {}
-#         if cover_templates_dir and os.path.exists(cover_templates_dir):
-#             files = [f for f in os.listdir(cover_templates_dir) if f.endswith(".pdf")]
-#             if files:
-#                 for f in files:
-#                     cover_options[os.path.splitext(f)[0]] = os.path.join(cover_templates_dir, f)
-#             else:
-#                 st.warning("No cover templates found in cover_templates folder.")
-#         else:
-#             st.warning("Cover templates folder not available.")
-#
-#         if not cover_options:
-#             st.error("No valid cover templates available. Cannot proceed.")
-#             st.stop()
-#
-#         # Create columns for layout
-#         col1, col2 = st.columns([1, 2])
-#
-#         with col1:
-#             st.subheader("Select Cover Page Template")
-#             # Use selectbox instead of radio
-#             selected_cover = st.selectbox(
-#                 "Choose a cover page style:",
-#                 options=list(cover_options.keys()),
-#                 index=0,
-#                 key="cover_template_select"
-#             )
-#
-#             # Get the selected template path
-#             template_path = cover_options[selected_cover]
-#
-#             # Process the template (show unmodified version in preview)
-#             output_pdf = "temp_cover.pdf"
-#             pdf_editor = EditTextFile(template_path)
-#
-#             modifications = {
-#                 "Name:": f": {st.session_state.proposal_data['client_name']}",
-#                 "Email:": f": {st.session_state.proposal_data['email']}",
-#                 "Phone": f": {st.session_state.proposal_data['phone']}",
-#                 "Country": f": {st.session_state.proposal_data['country']}",
-#                 "Date": f"{st.session_state.proposal_data['proposal_date']}"
-#             }
-#
-#             # Apply modifications
-#             pdf_editor.modify_pdf_fields(output_pdf, modifications, 8)
-#
-#         with col2:
-#             st.subheader("Template Preview")
-#             # Show preview of the selected template
-#             if os.path.exists(output_pdf):
-#                 pdf_view(output_pdf)
-#             else:
-#                 st.warning("Preview not available")
-#
-#         # Form submit button at the bottom
-#         with st.form("proposal_form_step2"):
-#             if st.form_submit_button("Next: Select Index Page"):
-#                 st.session_state.proposal_data["cover_template"] = output_pdf
-#                 st.session_state.proposal_form_step = 3
-#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-#
-#     # Step 3: Select Index Page Template
-#     elif st.session_state.proposal_form_step == 3:
-#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 2))
-#
-#         # folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
-#         index_templates_dir = folder_paths.get("index_templates")
-#         print(f"index temp _dir{index_templates_dir}")
-#
-#         index_options = {}
-#         print(f"cover_temp path: {os.path.exists(index_templates_dir)}")
-#
-#         if index_templates_dir and os.path.exists(index_templates_dir):
-#             files = [f for f in os.listdir(index_templates_dir) if f.endswith(".pdf")]
-#             if files:
-#                 for f in files:
-#                     index_options[os.path.splitext(f)[0]] = os.path.join(index_templates_dir, f)
-#             else:
-#                 st.warning("No index templates found in index_templates folder.")
-#         else:
-#             st.warning("Index templates folder not available.")
-#
-#         st.subheader("Select Index Page Template")
-#
-#         # Create layout columns
-#         col1, col2 = st.columns([1, 2])
-#         if 'selected_index' not in st.session_state:
-#             st.session_state.selected_index = None
-#
-#         options_list = list(index_options.keys())
-#
-#         if (
-#                 st.session_state.selected_index is not None
-#                 and st.session_state.selected_index in options_list
-#         ):
-#             initial_index = options_list.index(st.session_state.selected_index)
-#         else:
-#             initial_index = 0
-#
-#         with col1:
-#             # Select box outside the form for dynamic updates
-#             selected_index = st.selectbox(
-#                 "Choose an index page style:",
-#                 options=options_list,
-#                 index=initial_index
-#             )
-#
-#         with col2:
-#             # Show preview of selected index
-#             pdf_view(index_options[selected_index])
-#
-#         # Now wrap the submission button in the form
-#         with st.form("proposal_form_step3"):
-#             # Just the submit button
-#             if st.form_submit_button("Next: Select Business Requirements Sections"):
-#                 st.info("Adding Pages 3 to 6")
-#                 st.session_state.proposal_data["index_template"] = index_options[selected_index]
-#                 p3_to_p6_templates_dir = folder_paths.get("p3_to_p6_templates")
-#                 files = sorted([f for f in os.listdir(p3_to_p6_templates_dir) if not f.startswith('.')])
-#                 first_file = files[0]
-#                 first_file_path = os.path.join(p3_to_p6_templates_dir, first_file)
-#
-#                 st.session_state.proposal_data["p3_p6_template"] = first_file_path
-#                 st.session_state.proposal_form_step = 4
-#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-#
-#     # Step 4: Select BR Page Template
-#     elif st.session_state.proposal_form_step == 4:
-#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 3))
-#
-#         # Initialize selected_br if not set
-#         br_templates_dir = folder_paths.get("br_templates")
-#         print(f"br temp _dir{br_templates_dir}")
-#
-#         br_options = {}
-#         print(f"br_temp path: {os.path.exists(br_templates_dir)}")
-#
-#         if br_templates_dir and os.path.exists(br_templates_dir):
-#             files = [f for f in os.listdir(br_templates_dir) if f.endswith(".pdf")]
-#             if files:
-#                 for f in files:
-#                     br_options[os.path.splitext(f)[0]] = os.path.join(br_templates_dir, f)
-#             else:
-#                 st.warning("No br templates found in br_templates folder.")
-#         else:
-#             st.warning("br templates folder not available.")
-#
-#         st.subheader("Select Business Requirements Page Template")
-#
-#         if 'selected_br' not in st.session_state:
-#             st.session_state.selected_br = None
-#
-#         br_options_list = list(br_options.keys())
-#
-#         if (
-#                 st.session_state.selected_br is not None
-#                 and st.session_state.selected_br in br_options_list
-#         ):
-#             initial_br = br_options_list.index(st.session_state.selected_br)
-#         else:
-#             initial_br = 0
-#
-#         # Create layout columns
-#         col1, col2 = st.columns([1, 2])
-#
-#         with col1:
-#             # Select box outside the form for dynamic updates
-#             selected_br = st.selectbox(
-#                 "Choose a Business Requirements page style:",
-#                 options=br_options_list,
-#                 index=initial_br
-#             )
-#             # Save current selection in session state
-#             st.session_state.selected_br = selected_br
-#
-#         with col2:
-#             # Show preview of selected BR
-#             pdf_view(br_options[selected_br])
-#
-#         # Now wrap the submission button in the form
-#         with st.form("proposal_form_step4"):
-#             # Just the submit button
-#             if st.form_submit_button("Next: Select Content Sections"):
-#                 st.info("Adding Pages 7 to 13")
-#                 st.session_state.proposal_data["br_template"] = br_options[selected_br]
-#                 st.session_state.proposal_form_step = 5
-#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-#
-#     # Step 5: Select Content Page Template
-#     elif st.session_state.proposal_form_step == 5:
-#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 4))
-#
-#         content_templates_dir = folder_paths.get("content_templates")
-#         print(f"content temp _dir{content_templates_dir}")
-#
-#         content_options = {}
-#         print(f"content_temp path: {os.path.exists(content_templates_dir)}")
-#
-#         if content_templates_dir and os.path.exists(content_templates_dir):
-#             files = [f for f in os.listdir(content_templates_dir) if f.endswith(".pdf")]
-#             if files:
-#                 for f in files:
-#                     content_options[os.path.splitext(f)[0]] = os.path.join(content_templates_dir, f)
-#             else:
-#                 st.warning("No Content templates found in content_templates folder.")
-#         else:
-#             st.warning("Content templates folder not available.")
-#
-#         st.subheader("Select Content Page Template")
-#
-#         if 'selected_content' not in st.session_state:
-#             st.session_state.selected_content = None
-#
-#         content_options_list = list(content_options.keys())
-#
-#         if (
-#                 st.session_state.selected_content is not None
-#                 and st.session_state.selected_content in content_options_list
-#         ):
-#             initial_content = content_options_list.index(st.session_state.selected_content)
-#         else:
-#             initial_content = 0
-#
-#         # Create layout columns
-#         col1, col2 = st.columns([1, 2])
-#
-#         with col1:
-#             # Select box outside the form for dynamic updates
-#             selected_content = st.selectbox(
-#                 "Choose a Content page style:",
-#                 options=content_options_list,
-#                 index=initial_content
-#             )
-#             # Save current selection in session state
-#             st.session_state.selected_content = selected_content
-#
-#         with col2:
-#             # Show preview of selected Content
-#             pdf_view(content_options[selected_content])
-#
-#         # Now wrap the submission button in the form
-#         with st.form("proposal_form_step5"):
-#             # Just the submit button
-#             if st.form_submit_button("Next: Preview"):
-#                 st.session_state.proposal_data["content_template"] = content_options[selected_content]
-#                 st.session_state.proposal_form_step = 6
-#                 # Optional: Add file existence checks
-#
-#                 merger_files = [
-#                     st.session_state.proposal_data["cover_template"],
-#                     st.session_state.proposal_data["index_template"],
-#                     st.session_state.proposal_data["p3_p6_template"],  # Now using the correct key
-#                     st.session_state.proposal_data["br_template"],
-#                     st.session_state.proposal_data["content_template"]
-#                 ]
-#
-#                 import os
-#                 for file_path in merger_files:
-#                     if not os.path.exists(file_path):
-#                         st.error(f"File not found: {file_path}")
-#                         return
-#
-#                 merger = Merger(merger_files)
-#                 merger.merge_pdf_files("merged_output.pdf")
-#                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-#
-#     elif st.session_state.proposal_form_step == 6:
-#         from PyPDF2 import PdfReader
-#
-#         st.button("← Back", on_click=lambda: setattr(st.session_state, 'proposal_form_step', 5))
-#         st.title("📄 Preview and Finalize Proposal")
-#
-#         merged_path = "merged_output.pdf"
-#         try:
-#             reader = PdfReader(merged_path)
-#             num_pages = len(reader.pages)
-#
-#             if 'included_pages' not in st.session_state:
-#                 # By default include all pages
-#                 st.session_state.included_pages = [True] * num_pages
-#
-#             st.write("Use the toggles below to include or exclude each page in the final proposal:")
-#
-#             for i in range(num_pages):
-#                 col1, col2 = st.columns([1, 4])
-#                 with col1:
-#                     st.session_state.included_pages[i] = st.radio(
-#                         f"Page {i + 1}",
-#                         options=["Include", "Exclude"],
-#                         index=0 if st.session_state.included_pages[i] else 1,
-#                         key=f"page_select_{i}"
-#                     ) == "Include"
-#
-#                 with col2:
-#                     try:
-#                         import pdfplumber
-#                         with pdfplumber.open(merged_path) as pdf:
-#                             preview_image = pdf.pages[i].to_image(resolution=100)
-#                             st.image(
-#                                 preview_image.original,
-#                                 caption=f"Page {i + 1}",
-#                                 use_column_width=True
-#                             )
-#                     except Exception as e:
-#                         st.warning(f"Could not preview Page {i + 1}: {str(e)}")
-#
-#             if st.button("Finalize and Generate Final Proposal"):
-#                 from PyPDF2 import PdfWriter
-#
-#                 final_output_path = f"{st.session_state.proposal_data['client_name']} proposal.pdf"
-#                 writer = PdfWriter()
-#
-#                 for i in range(num_pages):
-#                     if st.session_state.included_pages[i]:
-#                         writer.add_page(reader.pages[i])
-#
-#                 with open(final_output_path, "wb") as f_out:
-#                     writer.write(f_out)
-#
-#                 st.success("✅ Final proposal generated!")
-#                 with open(final_output_path, "rb") as f:
-#                     st.download_button("Download Final Proposal", f, file_name=final_output_path)
-#
-#         except FileNotFoundError:
-#             st.error("Merged PDF file not found. Please go back and complete the previous steps.")
-
-
-
-
-
-# def fetch_path_from_temp_dir(sub_folder, selected_template):
-#     the_temp_dir = folder_paths.get(sub_folder)
-#     # br_temp_dir = folder_paths.get("business_requirement")
-#     if the_temp_dir:
-#         # Find the matching file in the temp directory
-#         # expected_filename = selected_br_template["original_name"]
-#         expected_filename = selected_template["original_name"]
-#         if not expected_filename.lower().endswith(".pdf"):
-#             expected_filename += ".pdf"
-#
-#         template_path = os.path.join(br_temp_dir, expected_filename)
-#         if os.path.exists(template_path):
-#             return template_path
-#         else:
-#             st.error(f"Template file not found: {template_path}")
-#             return None
-#     else:
-#         st.error("Templates directory not found")
-#         return None
 

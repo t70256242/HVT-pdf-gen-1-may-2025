@@ -142,6 +142,70 @@ def add_bold_line(paragraph, length=None, boldness=True, font_size=15):
 #     doc.save(output_path)
 #     print("Payment details section added.")
 
+from docx import Document
+from docx.shared import Pt, RGBColor
+from docx.oxml.ns import qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+def add_footer_to_docx(doc_path, y_offset_mm=15):
+    """
+    Adds a two-row left/right aligned footer with an adjustable vertical offset.
+
+    Args:
+        doc_path (str): Path to the .docx file.
+        y_offset_mm (float): Distance from bottom of page to footer, in millimeters.
+    """
+    doc = Document(doc_path)
+    section = doc.sections[0]
+    footer = section.footer
+
+    # Set vertical offset (from bottom of page)
+    section.footer_distance = Pt(y_offset_mm * 2.835)  # mm to points
+
+    # Clear existing footer paragraphs
+    for para in footer.paragraphs:
+        p = para._element
+        p.getparent().remove(p)
+        p._p = p._element = None
+
+    # Calculate usable page width in points
+    page_width = section.page_width
+    left_margin = section.left_margin
+    right_margin = section.right_margin
+    usable_width = (page_width - left_margin - right_margin) / 12700  # EMU to pt
+
+    def create_footer_line(left_text, right_text, right_color=RGBColor(0, 0, 0)):
+        para = footer.add_paragraph()
+        para.paragraph_format.tab_stops.add_tab_stop(Pt(usable_width), WD_ALIGN_PARAGRAPH.RIGHT)
+        para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+        # Left side
+        left_run = para.add_run(left_text)
+        left_run.font.name = 'Calibri'
+        left_run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+        left_run.font.size = Pt(11)
+        left_run.font.color.rgb = RGBColor(0, 0, 0)  # Black
+
+        para.add_run('\t')  # Tab to right side
+
+        # Right side
+        right_run = para.add_run(right_text)
+        right_run.font.name = 'Calibri'
+        right_run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+        right_run.font.size = Pt(11)
+        right_run.font.color.rgb = right_color
+
+    # Add two rows
+    create_footer_line("+1 (469) 214-6349", "www.hvtechnologies.app", RGBColor(0, 102, 204))  # Blue link
+    create_footer_line("+91-9773603818", "hardik@hvtechnologies.app")  # Black
+
+    doc.save(doc_path)
+    print(f"Footer added to {doc_path} with y-offset: {y_offset_mm}mm")
+
+
+
+
+
 def set_footer(doc):
     for section in doc.sections:
         footer = section.footer
@@ -231,44 +295,88 @@ def add_payment_details_section(output_path, line_length=None, line_bold=True, l
     print("Payment details and terms section added with footer.")
 
 
+# def invoice_edit(input_path, output_path, context):
+#     doc = DocxTemplate(input_path)
+#
+#     # Custom Jinja2 env with sum filter
+#     jinja_env = Environment()
+#     jinja_env.filters['sum'] = sum_filter
+#
+#     # Render and save
+#     doc.render(context, jinja_env)
+#     doc.save(output_path)
+#
+#     print(f"{output_path} has been created!")
+
+
+from docxtpl import DocxTemplate
+from jinja2 import Environment
+from num2words import num2words  # ✅ Import number-to-words converter
+
+def sum_filter(values):
+    return sum(values)
+
 def invoice_edit(input_path, output_path, context):
+    import re
     doc = DocxTemplate(input_path)
 
-    # Custom Jinja2 env with sum filter
-    jinja_env = Environment()
-    jinja_env.filters['sum'] = sum_filter
+    # Sum payment_description prices
+    # total_price = 0
+    # for item in context["payment_description"]:
+    #     # Extract numbers and decimals only, e.g. "USD 5,000.25" → "5000.25"
+    #     cleaned = re.sub(r"[^\d.]", "", str(item["price"]))
+    #
+    #     # Handle empty or invalid price fallback
+    #     if cleaned:
+    #         try:
+    #             numeric_price = float(cleaned)
+    #         except ValueError:
+    #             numeric_price = 0
+    #     else:
+    #         numeric_price = 0
+    #
+    #     # Update the item to have formatted price (e.g. "5,000.25")
+    #     item["price"] = f"{numeric_price:,.2f}"
+    #     total_price += numeric_price
+    # # Add total sum and its word version
+    # context["sum"] = f"{total_price:,}"
+    # context["sum_to_word"] = num2words(total_price, to="cardinal", lang="en").title()  # e.g. "Fifty Thousand"
 
-    # Render and save
+    # Render
+    jinja_env = Environment()
+    # jinja_env.filters['sum'] = sum_filter
     doc.render(context, jinja_env)
     doc.save(output_path)
-
-    # Add payment section with automatic line length
-    add_payment_details_section(output_path, line_length=None, line_bold=True, line_font_size=14)
 
     print(f"{output_path} has been created!")
 
 
-# Example context
-context = {
-    "date": "April 29, 2025",
-    "name": "Ojo Alaba",
-    "client_company_name": "Yoruba Ltd",
-    "client_phone": "+1 234 56000",
-    "client_address": "Lead Developer Street, Anthony, Riyah Turkey",
-    "client_email": "unfresh@email.com",
-    "project_name": "Tolu Scrapper",
-    "invoice_no": "#45678",
-    "payment_description": [
-        {"s_no": "1", "description": "Project Setup Fee", "amount": "10,000"},
-        {"s_no": "2", "description": "Development Phase 1", "amount": "25,000"},
-        {"s_no": "3", "description": "API Integration", "amount": "15,000"},
-    ],
-    "payment_schedule": [
-        {"s_no": "1", "schedule": "Upon signing", "amount": "10,000"},
-        {"s_no": "2", "schedule": "After 30 days", "amount": "25,000"},
-        {"s_no": "3", "schedule": "Final delivery", "amount": "15,000"},
-    ],
-}
 
-invoice_edit("try_invoice_2_page_1.docx", "modified_invoice_13.docx", context)
+
+# # Example context
+# context = {
+#     "date": "April 29, 2025",
+#     "client_name": "Ojo Alaba",
+#     "client_company_name": "Yoruba Ltd",
+#     "client_phone": "+1 234 56000",
+#     "company_number": "+1 234 56000",
+#     "company_gst": "9000",
+#     "client_address": "Lead Developer Street, Anthony, Riyah Turkey",
+#     "client_email": "unfresh@email.com",
+#     "project_name": "Tolu Scrapper",
+#     "invoice_no": "#45678",
+#     "payment_currency": "USD $",
+#     "payment_description": [
+#         {"s_no": "1", "description": "Project Setup Fee", "hns_code": 2345666, "price": "10,000"},
+#         {"s_no": "2", "description": "Development Phase 1", "hns_code": 2345666, "price": "25,000"},
+#         {"s_no": "3", "description": "API Integration", "hns_code": 2345666, "price": "15,000"},
+#     ],
+#     "payment_schedule": [
+#         {"s_no": "1", "schedule": "Upon signing", "price": "10,000"},
+#         {"s_no": "2", "schedule": "After 30 days", "price": "25,000"},
+#         {"s_no": "3", "schedule": "Final delivery", "price": "15,000"},
+#     ],
+# }
+#
+# invoice_edit("gen_4.docx", "gen_invoice_1.docx", context)
 
