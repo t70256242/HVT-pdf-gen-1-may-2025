@@ -1332,7 +1332,7 @@ def handle_proposal():
             proposal_date = st.date_input("Proposal Date")
 
             if st.form_submit_button("Next: Select Cover Page"):
-                print({
+                print("Client data",{
                         "client_name": name,
                         "company_name": company,
                         "email": email,
