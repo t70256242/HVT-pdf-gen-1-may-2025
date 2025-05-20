@@ -1304,10 +1304,33 @@ def get_specific_templates(all_templates, number_of_pages):
     return result
 
 
+def align_text_fixed_width(text, total_char_width=12, alignment='center'):
+
+    text_length = len(text)
+    if text_length >= total_char_width:
+        return text  # no padding needed or text is too long
+
+    space_count = total_char_width - text_length
+
+    if alignment == 'left':
+        return text + ' ' * space_count
+    elif alignment == 'right':
+        return ' ' * space_count + text
+    elif alignment == 'center':
+        left_spaces = space_count // 2
+        right_spaces = space_count - left_spaces
+        return ' ' * left_spaces + text + ' ' * right_spaces
+    else:
+        raise ValueError("alignment must be 'left', 'center', or 'right'")
+    return text
+
+
+
 def handle_proposal():
     st.title("📄 Proposal Form")
     st.session_state.setdefault("proposal_data", {})
     st.session_state.setdefault("proposal_form_step", 1)
+    space_ = " "
 
     # if 'proposal_data' not in st.session_state:
     #     st.session_state.proposal_data = {}
@@ -1413,6 +1436,8 @@ def handle_proposal():
                 output_path=temp_img_path,
                 replacements={
                     "{ client_name }": f"{st.session_state.proposal_data['client_name']}",
+                    # "{ client_name }": (
+                    #     align_text_fixed_width(st.session_state.proposal_data['client_name'], 12, 'center'), 0, 7),
                     "{ client_email }": f"{st.session_state.proposal_data['email']}",
                     "{ client_phone }": f"{st.session_state.proposal_data['phone']}",
                     "{ client_country }": f"{st.session_state.proposal_data['country']}",
@@ -1487,10 +1512,21 @@ def handle_proposal():
                 expected_filename += ".pdf"
 
             template_path = os.path.join(br_temp_dir, expected_filename)
+            if len(st.session_state.proposal_data['client_name']) >= 5:
+                lenght_dif = len(st.session_state.proposal_data['client_name']) - 5
+                new_text = f"{space_ * lenght_dif}      {st.session_state.proposal_data['client_name']}"
+            elif len(st.session_state.proposal_data['client_name']) < 5:
+                lenght_dif = 5 - len(st.session_state.proposal_data['client_name'])
+                new_text = f"{space_ * lenght_dif}      {st.session_state.proposal_data['client_name']}"
+            else:
+                new_text = st.session_state.proposal_data['client_name']
 
             if os.path.exists(template_path):
                 modifications = {
-                    "{ client_name }": (f"    {st.session_state.proposal_data['client_name']}", 0, 7),
+                    "{ client_name }": (new_text, 0, 7),
+                    # "{ client_name }": (f"      {st.session_state.proposal_data['client_name']}", 0, 7),
+                    # "{ client_name }": (
+                    #     align_text_fixed_width(st.session_state.proposal_data['client_name'], 12, 'center'), 0, 7),
                     "{ date }": (f"{st.session_state.proposal_data['proposal_date']}", -30, 0)
                 }
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_br:
