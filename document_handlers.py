@@ -1512,16 +1512,18 @@ def handle_proposal():
                 expected_filename += ".pdf"
 
             template_path = os.path.join(br_temp_dir, expected_filename)
-            if len(st.session_state.proposal_data['client_name']) >= 5:
-                lenght_dif = len(st.session_state.proposal_data['client_name']) - 5
-                new_text = f"{space_ * lenght_dif}      {st.session_state.proposal_data['client_name']}"
-            elif len(st.session_state.proposal_data['client_name']) < 5:
-                lenght_dif = 5 - len(st.session_state.proposal_data['client_name'])
-                new_text = f"{space_ * lenght_dif}      {st.session_state.proposal_data['client_name']}"
-            else:
-                new_text = st.session_state.proposal_data['client_name']
+
 
             if os.path.exists(template_path):
+                the_name = st.session_state.proposal_data['client_name']
+                if len(the_name) >= 5:
+                    lenght_dif = len(the_name) - 5
+                    new_text = f"{space_ * lenght_dif}      {the_name}"
+                elif len(the_name) < 5:
+                    lenght_dif = 5 - len(the_name)
+                    new_text = f"{space_ * lenght_dif}      {the_name}"
+                else:
+                    new_text = the_name
                 modifications = {
                     "{ client_name }": (new_text, 0, 7),
                     # "{ client_name }": (f"      {st.session_state.proposal_data['client_name']}", 0, 7),
