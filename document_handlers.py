@@ -1332,26 +1332,27 @@ def handle_proposal():
             proposal_date = st.date_input("Proposal Date")
 
             if st.form_submit_button("Next: Select Cover Page"):
-                print("Client data",{
-                        "client_name": name,
-                        "company_name": company,
-                        "email": email,
-                        "phone": phone,
-                        "country": country,
-                        "proposal_date": proposal_date.strftime("%B %d, %Y")
-                    })
+                st.session_state.proposal_data = {
+                    "client_name": name,
+                    "company_name": company,
+                    "email": email,
+                    "phone": phone,
+                    "country": country,
+                    "proposal_date": proposal_date.strftime("%B %d, %Y")
+                }
                 if not st.session_state.proposal_data:
-                    st.warning("Proposal data not available")
+                    print("Proposal data not available")
+                    st.write("Proposal data not available")
                 else:
 
-                    st.session_state.proposal_data = {
-                        "client_name": name,
-                        "company_name": company,
-                        "email": email,
-                        "phone": phone,
-                        "country": country,
-                        "proposal_date": proposal_date.strftime("%B %d, %Y")
-                    }
+                    # st.session_state.proposal_data = {
+                    #     "client_name": name,
+                    #     "company_name": company,
+                    #     "email": email,
+                    #     "phone": phone,
+                    #     "country": country,
+                    #     "proposal_date": proposal_date.strftime("%B %d, %Y")
+                    # }
                     st.session_state.proposal_form_step = 2
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
