@@ -1308,8 +1308,6 @@ def handle_proposal():
     st.session_state.setdefault("proposal_data", {})
     st.session_state.setdefault("proposal_form_step", 1)
 
-
-
     # if 'proposal_data' not in st.session_state:
     #     st.session_state.proposal_data = {}
     #
@@ -1334,6 +1332,14 @@ def handle_proposal():
             proposal_date = st.date_input("Proposal Date")
 
             if st.form_submit_button("Next: Select Cover Page"):
+                print({
+                        "client_name": name,
+                        "company_name": company,
+                        "email": email,
+                        "phone": phone,
+                        "country": country,
+                        "proposal_date": proposal_date.strftime("%B %d, %Y")
+                    })
                 if not st.session_state.proposal_data:
                     st.warning("Proposal data not available")
                 else:
