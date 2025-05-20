@@ -484,6 +484,7 @@ def handle_nda():
                     return
 
                 # Get the first template (order_number = 1)
+
                 template_doc = templates[0]
                 template_data = template_doc.to_dict()
 
@@ -1342,7 +1343,8 @@ def handle_proposal():
                 }
                 if not st.session_state.proposal_data:
                     print("Proposal data not available")
-                    st.write("Proposal data not available")
+                    # st.write("Proposal data not available")
+                    st.error("Proposal data not available")
                 else:
 
                     # st.session_state.proposal_data = {
