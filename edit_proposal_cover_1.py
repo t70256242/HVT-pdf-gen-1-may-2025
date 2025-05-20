@@ -21,7 +21,7 @@
 
 import fitz  # PyMuPDF
 
-def replace_pdf_placeholders(input_path, output_path, replacements, y_offset=0, padding=1):
+def replace_pdf_placeholders(input_path, output_path, replacements, y_offset=0, padding=3):
     doc = fitz.open(input_path)
 
     for page in doc:
