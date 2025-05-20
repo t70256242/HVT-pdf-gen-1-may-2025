@@ -1416,9 +1416,9 @@ def handle_proposal():
                     "{ client_email }": f"{st.session_state.proposal_data['email']}",
                     "{ client_phone }": f"{st.session_state.proposal_data['phone']}",
                     "{ client_country }": f"{st.session_state.proposal_data['country']}",
-                    "{ date }": f"{st.session_state.proposal_data['proposal_date']}"
+                    "{ date }": f" {st.session_state.proposal_data['proposal_date']}"
                 },
-                y_offset=19
+                y_offset=20
             )
 
             # print(f"modifications: {modifications}")
