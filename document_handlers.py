@@ -1306,11 +1306,13 @@ def get_specific_templates(all_templates, number_of_pages):
 def handle_proposal():
     import os
     st.title("📄 Proposal Form")
+    if 'proposal_data' not in st.session_state:
+        st.session_state.proposal_data = {}
 
     # Initialize session state for multi-page form
     if 'proposal_form_step' not in st.session_state:
         st.session_state.proposal_form_step = 1
-        st.session_state.proposal_data = {}
+        # st.session_state.proposal_data = {}
 
     all_templates = get_proposal_template_details(firestore_db)
     folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
