@@ -1304,14 +1304,18 @@ def get_specific_templates(all_templates, number_of_pages):
 
 
 def handle_proposal():
-    import os
     st.title("📄 Proposal Form")
-    if 'proposal_data' not in st.session_state:
-        st.session_state.proposal_data = {}
+    st.session_state.setdefault("proposal_data", {})
+    st.session_state.setdefault("proposal_form_step", 1)
 
-    # Initialize session state for multi-page form
-    if 'proposal_form_step' not in st.session_state:
-        st.session_state.proposal_form_step = 1
+
+
+    # if 'proposal_data' not in st.session_state:
+    #     st.session_state.proposal_data = {}
+    #
+    # # Initialize session state for multi-page form
+    # if 'proposal_form_step' not in st.session_state:
+    #     st.session_state.proposal_form_step = 1
         # st.session_state.proposal_data = {}
 
     all_templates = get_proposal_template_details(firestore_db)
@@ -1330,15 +1334,19 @@ def handle_proposal():
             proposal_date = st.date_input("Proposal Date")
 
             if st.form_submit_button("Next: Select Cover Page"):
-                st.session_state.proposal_data = {
-                    "client_name": name,
-                    "company_name": company,
-                    "email": email,
-                    "phone": phone,
-                    "country": country,
-                    "proposal_date": proposal_date.strftime("%B %d, %Y")
-                }
-                st.session_state.proposal_form_step = 2
+                if not st.session_state.proposal_data:
+                    st.warning("Proposal data not available")
+                else:
+
+                    st.session_state.proposal_data = {
+                        "client_name": name,
+                        "company_name": company,
+                        "email": email,
+                        "phone": phone,
+                        "country": country,
+                        "proposal_date": proposal_date.strftime("%B %d, %Y")
+                    }
+                    st.session_state.proposal_form_step = 2
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
     elif st.session_state.proposal_form_step == 2:
