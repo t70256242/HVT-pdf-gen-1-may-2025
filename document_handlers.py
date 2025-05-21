@@ -93,28 +93,50 @@ def save_generated_file_to_firebase(local_file_path, doc_type, bucket):
         return None, None
 
 
-# def generate_download_link(file_path, filename, file_type, doc_type):
-#     with open(file_path, "rb") as f:
-#         file_bytes = f.read()
-#         b64 = base64.b64encode(file_bytes).decode()
-#         href = f'''
-#         <a href="data:application/pdf;base64,{b64}" download="{filename}"
-#            style="display: inline-block;
-#                   padding: 12px 24px;
-#                   background: linear-gradient(45deg, #2196F3, #00BCD4);
-#                   color: white;
-#                   text-decoration: none;
-#                   border-radius: 6px;
-#                   font-weight: bold;
-#                   font-family: sans-serif;
-#                   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-#                   transition: all 0.3s ease;
-#                   border: none;
-#                   cursor: pointer;">
-#            📥 Download {doc_type} {file_type}
-#         </a>
-#         '''
-#         st.markdown(href, unsafe_allow_html=True)
+# from datetime import datetime
+# import os
+# import streamlit as st
+# from firebase_admin import firestore
+
+
+def save_generated_file_to_firebase_2(
+        local_file_path,
+        doc_type,
+        bucket,
+        file_type,
+        file_details,
+        proposal_subdir=None,
+        normalized_subdir=None,
+):
+    try:
+        # Get filename from local path
+        filename = os.path.basename(local_file_path)
+
+        # Define storage path in Firebase Storage
+        storage_path = f"hvt_generator/generated/{doc_type}/{filename}"
+
+        # Upload to Firebase Storage
+        blob = bucket.blob(storage_path)
+        blob.upload_from_filename(local_file_path)
+
+        # Get public URL
+        download_url = blob.public_url
+
+        file_details.update(
+            {
+                "doc_type": doc_type,
+                "file_type": file_type
+            }
+        )
+
+        firestore_db.collection("generated_files").add(file_details)
+
+        st.success("✅ File uploaded and metadata saved to Firestore.")
+        return storage_path, download_url
+
+    except Exception as e:
+        st.error(f"❌ Failed to upload file or save metadata: {e}")
+        return None, None
 
 
 def generate_download_link(file_path, filename, file_type, doc_type):
@@ -369,15 +391,31 @@ def handle_internship_offer():
                 st.subheader("Download Documents")
                 col1, col2 = st.columns(2)
                 file_prefix = f"{context['name'].replace(' ', ' ')} {context['position'].replace(' ', ' ')}"
+                file_upload_details = {
+                    "intern": context['name'],
+                    "position": context['position'],
+                    "start_date": context['date'],
+                    "duration": f"{st.session_state.offer_data['duration']} months",
+                    "stipend": context['stipend'],
+                    "first_pay_cheque_date": context['first_paycheque_date'],
+                    "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "upload_timestamp": firestore.SERVER_TIMESTAMP,
+                }
 
                 with col1:
                     if os.path.exists(pdf_output):
-                        # generate_download_link(pdf_output,
-                        #                        f"{file_prefix} Offer Letter.pdf", "PDF", "Internship")
-                        #
+
                         if st.button("✅ Confirm and Upload Contract PDF", key="upload_pdf"):
-                            storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Internship",
-                                                                                       bucket=bucket)
+                            # storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Internship",
+                            #                                                            bucket=bucket)
+
+                            save_generated_file_to_firebase_2(
+                                pdf_output,
+                                "Internship",
+                                bucket,
+                                "PDF",
+                                file_upload_details
+                            )
 
                             st.success("Now you can download the file:")
                             # Step 2: Show download link only after upload
@@ -385,13 +423,7 @@ def handle_internship_offer():
                                                    f"{file_prefix} Offer Letter.pdf",
                                                    "PDF", "Internship")
 
-                        # with open(pdf_output, "rb") as f_pdf:
-                        #     st.download_button(
-                        #         "⬇️ Download PDF",
-                        #         f_pdf,
-                        #         file_name=f"{file_prefix} Offer Letter.pdf",
-                        #         mime="application/pdf"
-                        #     )
+
                     else:
                         st.warning("PDF file not available")
 
@@ -401,9 +433,16 @@ def handle_internship_offer():
                         #                        f"{file_prefix} Offer Letter.docx", "DOCX", "Internship")
 
                         if st.button("✅ Confirm and Upload Contract DOCX", key="upload_docx"):
-                            storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Internship",
-                                                                                       bucket=bucket)
+                            # storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Internship",
+                            #                                                            bucket=bucket)
 
+                            save_generated_file_to_firebase_2(
+                                docx_output,
+                                "Internship",
+                                bucket,
+                                "DOCX",
+                                file_upload_details
+                            )
                             st.success("Now you can download the file:")
                             # Step 2: Show download link only after upload
                             generate_download_link(docx_output,
@@ -464,11 +503,22 @@ def handle_nda():
         # st.success("NDA generated successfully!")
         with st.spinner("Loading template and generating offer..."):
             st.button("← Back to Form", on_click=lambda: setattr(st.session_state, 'nda_form_step', 1))
-
+            # 9
+            the_name = st.session_state.nda_data['client_name']
+            space_ = " "
+            if len(the_name) >= 9:
+                lenght_dif = len(the_name) - 9
+                new_text = f"{space_ * lenght_dif}      {the_name}"
+            elif len(the_name) < 9:
+                lenght_dif = 9 - len(the_name)
+                new_text = f"{space_ * lenght_dif}      {the_name}"
+            else:
+                new_text = the_name
             # Generate documents
             replacements_docx = {
                 "date": st.session_state.nda_data["date"],
-                "client_name": f"                 {st.session_state.nda_data['client_name']}",
+                # "client_name": f" {st.session_state.nda_data['client_name']}",
+                "client_name": new_text,
                 "client_company_name": st.session_state.nda_data["client_company_name"],
                 "client_company_address": st.session_state.nda_data["client_company_address"]
             }
@@ -542,20 +592,36 @@ def handle_nda():
             st.subheader("Download Documents")
             col1, col2 = st.columns(2)
 
+            file_upload_details = {
+                "client_name": st.session_state.nda_data['client_name'],
+                "company_name": st.session_state.nda_data['client_company_name'],
+                "company_address": st.session_state.nda_data['client_company_address'],
+                "agreement_date": st.session_state.nda_data['date'],
+                "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "upload_timestamp": firestore.SERVER_TIMESTAMP,
+            }
+
             with col1:
                 # generate_download_link(pdf_output,
                 #                        f"{st.session_state.nda_data['client_company_name']} NDA.pdf", "PDF", "NDA")
                 #
                 if st.button("✅ Confirm and Upload Contract PDF", key="upload_pdf"):
-                    storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="NDA",
-                                                                               bucket=bucket)
+                    # storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="NDA",
+                    #                                                            bucket=bucket)
+
+                    save_generated_file_to_firebase_2(
+                        pdf_output,
+                        "NDA",
+                        bucket,
+                        "PDF",
+                        file_upload_details
+                    )
 
                     st.success("Now you can download the file:")
                     # Step 2: Show download link only after upload
                     generate_download_link(pdf_output,
                                            f"{st.session_state.nda_data['client_company_name']} NDA.pdf",
                                            "PDF", "NDA")
-
 
                 # with open(pdf_output, "rb") as f_pdf:
                 #     st.download_button(
@@ -572,13 +638,19 @@ def handle_nda():
                 if st.button("✅ Confirm and Upload Contract DOCX", key="upload_docx"):
                     storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="NDA",
                                                                                bucket=bucket)
+                    save_generated_file_to_firebase_2(
+                        docx_output,
+                        "NDA",
+                        bucket,
+                        "DOCX",
+                        file_upload_details
+                    )
 
                     st.success("Now you can download the file:")
                     # Step 2: Show download link only after upload
                     generate_download_link(docx_output,
                                            f"{st.session_state.nda_data['client_company_name']} NDA.docx",
                                            "DOCX", "NDA")
-
 
                 # with open(docx_output, "rb") as f_docx:
                 #     st.download_button(
@@ -752,7 +824,7 @@ def handle_invoice():
                     "s_no": str(s_no),
                     "description": description.strip(),
                     "hns_code": hns_code.strip(),
-                    "price": f"{st.session_state.invoice_currency['currency_sign']}{format_currency_amount(price.strip())}",
+                    "price": f"{st.session_state.invoice_currency['currency_sign']}{price.strip()}",
                     "additional_desc": ""
                 }
                 st.session_state.payment_items.append(new_item)
@@ -847,7 +919,7 @@ def handle_invoice():
             context = {
                 **st.session_state.invoice_data,
                 "payment_description": st.session_state.payment_items,
-                "sum": f"{st.session_state.invoice_currency['currency_sign']}{total}"
+                "sum": f"{st.session_state.invoice_currency['currency_sign']}{'{:,}'.format(total)}"
             }
 
             # Add amount in words
@@ -862,7 +934,8 @@ def handle_invoice():
             total_amount = sum(extract_numeric(item['price']) for item in st.session_state.payment_items)
 
             # total_amount = sum(float(item['price'].replace(',', '')) for item in st.session_state.payment_items)
-            context["sum_to_word"] = f"{num2words(abs(total_amount), to='currency').title()} {st.session_state.invoice_currency['currency_name']} only."
+            context[
+                "sum_to_word"] = f"{num2words(abs(total_amount), to='currency').title()} {st.session_state.invoice_currency['currency_name']} only."
 
             # Get template from Firestore
             doc_type = "Invoice"
@@ -947,16 +1020,32 @@ def handle_invoice():
             col1, col2 = st.columns(2)
             file_prefix = f"Invoice {context['client_name']} {context['invoice_no']}"
 
-            with col1:
-                # generate_download_link(
-                #     pdf_output,
-                #     f"{file_prefix}.pdf",
-                #     "PDF", "Invoice"
-                # )
+            file_upload_details = {
+                "invoice_no": context['invoice_no'],
+                "client_name": context['client_name'],
+                "company_name": context['client_company_name'],
+                "address": context['client_address'],
+                "phone": context['client_phone'],
+                "email": context['client_email'],
+                "invoice_date": context['date'],
+                "project_name": context['project_name'],
+                "gst": context['company_gst'],
+                "currency": context['payment_currency'],
+                "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "upload_timestamp": firestore.SERVER_TIMESTAMP,
+            }
 
-                if st.button("✅ Confirm and Upload Contract PDF",  key="upload_pdf"):
+            with col1:
+                if st.button("✅ Confirm and Upload Contract PDF", key="upload_pdf"):
                     storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Invoice",
                                                                                bucket=bucket)
+                    save_generated_file_to_firebase_2(
+                        pdf_output,
+                        "Invoice",
+                        bucket,
+                        "PDF",
+                        file_upload_details
+                    )
 
                     st.success("Now you can download the file:")
                     # Step 2: Show download link only after upload
@@ -970,9 +1059,16 @@ def handle_invoice():
                 #     f"{file_prefix}.docx",
                 #     "DOCX", "Invoice"
                 # )
-                if st.button("✅ Confirm and Upload Contract DOCX",  key="upload_docx"):
-                    storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Invoice",
-                                                                               bucket=bucket)
+                if st.button("✅ Confirm and Upload Contract DOCX", key="upload_docx"):
+                    # storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Invoice",
+                    #                                                            bucket=bucket)
+                    save_generated_file_to_firebase_2(
+                        docx_output,
+                        "Invoice",
+                        bucket,
+                        "DOCX",
+                        file_upload_details
+                    )
 
                     st.success("Now you can download the file:")
                     # Step 2: Show download link only after upload
@@ -1097,6 +1193,16 @@ def handle_contract():
             # PDF preview (requires pdfplumber)
             pdf_view(pdf_output)
 
+            file_upload_details = {
+                "client_name": st.session_state.contract_data['client_name'],
+                "company_name": st.session_state.contract_data['client_company_name'],
+                "address": st.session_state.contract_data['client_company_address'],
+                "contract_date": st.session_state.contract_data['date'],
+                "contract_end_date": st.session_state.contract_data['contract_end'],
+                "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "upload_timestamp": firestore.SERVER_TIMESTAMP,
+            }
+
             # Download buttons
             st.subheader("Download Documents")
             col1, col2 = st.columns(2)
@@ -1107,31 +1213,34 @@ def handle_contract():
                 #                        f"Contract.pdf",
                 #                        "PDF", "Contract")
                 if st.button("✅ Confirm and Upload Contract PDF", key="upload_pdf"):
-                    storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Contract",
-                                                                               bucket=bucket)
+                    # storage_path, public_url = save_generated_file_to_firebase(pdf_output, doc_type="Contract",
+                    #                                                            bucket=bucket)
+                    save_generated_file_to_firebase_2(
+                        pdf_output,
+                        "Contract",
+                        bucket,
+                        "PDF",
+                        file_upload_details
+                    )
 
                     st.success("Now you can download the file:")
                     # Step 2: Show download link only after upload
                     generate_download_link(pdf_output,
                                            f"{st.session_state.contract_data['client_company_name']} Contract.pdf",
                                            "PDF", "Contract")
-
-                # with open(pdf_output, "rb") as f_pdf:
-                #     st.download_button(
-                #         "⬇️ Download PDF",
-                #         f_pdf,
-                #         file_name=f"{st.session_state.contract_data['client_company_name']} Contract.pdf",
-                #         mime="application/pdf"
-                #     )
-
             with col2:
-                # generate_download_link(docx_output,
-                #                        f"{st.session_state.contract_data['client_company_name']} Contract.docx",
-                #                        "DOCX", "Contract")
+
                 # Step 1: Confirm and upload
                 if st.button("✅ Confirm and Upload Contract DOCX", key="upload_docx"):
                     storage_path, public_url = save_generated_file_to_firebase(docx_output, doc_type="Contract",
                                                                                bucket=bucket)
+                    save_generated_file_to_firebase_2(
+                        docx_output,
+                        "Contract",
+                        bucket,
+                        "DOCX",
+                        file_upload_details
+                    )
 
                     st.success("Now you can download the file:")
                     # Step 2: Show download link only after upload
@@ -1139,13 +1248,6 @@ def handle_contract():
                                            f"{st.session_state.contract_data['client_company_name']} Contract.docx",
                                            "DOCX", "Contract")
 
-                # with open(docx_output, "rb") as f_docx:
-                #     st.download_button(
-                #         "⬇️ Download DOCX",
-                #         f_docx,
-                #         file_name=f"{st.session_state.contract_data['client_company_name']} Contract.docx",
-                #         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                #     )
 
         # Clean up temp files
         try:
@@ -1236,7 +1338,6 @@ def fetch_path_from_temp_dir(sub_folder, selected_template, folder_paths):
 
 
 def get_proposal_template_details(firestore_db):
-
     doc_type = "Proposal"
     proposal_doc_ref = firestore_db.collection("hvt_generator").document(doc_type)
 
@@ -1305,7 +1406,6 @@ def get_specific_templates(all_templates, number_of_pages):
 
 
 def align_text_fixed_width(text, total_char_width=12, alignment='center'):
-
     text_length = len(text)
     if text_length >= total_char_width:
         return text  # no padding needed or text is too long
@@ -1325,7 +1425,6 @@ def align_text_fixed_width(text, total_char_width=12, alignment='center'):
     return text
 
 
-
 def handle_proposal():
     st.title("📄 Proposal Form")
     st.session_state.setdefault("proposal_data", {})
@@ -1338,7 +1437,7 @@ def handle_proposal():
     # # Initialize session state for multi-page form
     # if 'proposal_form_step' not in st.session_state:
     #     st.session_state.proposal_form_step = 1
-        # st.session_state.proposal_data = {}
+    # st.session_state.proposal_data = {}
 
     all_templates = get_proposal_template_details(firestore_db)
     folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
@@ -1494,7 +1593,6 @@ def handle_proposal():
 
         with col1:
 
-
             selected_br_name = st.selectbox(
                 "Choose a business requirements page style:",
                 options=list(br_options.keys()),
@@ -1512,7 +1610,6 @@ def handle_proposal():
                 expected_filename += ".pdf"
 
             template_path = os.path.join(br_temp_dir, expected_filename)
-
 
             if os.path.exists(template_path):
                 the_name = st.session_state.proposal_data['client_name']
@@ -1554,48 +1651,6 @@ def handle_proposal():
                 st.error(f"Template file not found: {template_path}")
         else:
             st.error("Business requirement templates directory not found")
-        # pdf_view(br_options[selected_br_name])
-
-        # with col2:
-        #     # Get the path to the downloaded template in temp directory
-        #     br_temp_dir = folder_paths.get("business_requirement")
-        #     if br_temp_dir:
-        #         # Find the matching file in the temp directory
-        #         expected_filename = selected_br_template["original_name"]
-        #         if not expected_filename.lower().endswith(".pdf"):
-        #             expected_filename += ".pdf"
-        #
-        #         template_path = os.path.join(br_temp_dir, expected_filename)
-        #
-        #         if os.path.exists(template_path):
-        #             modifications = {
-        #                 "{ client_name }": (f"    {st.session_state.proposal_data['client_name']}", 0, 7),
-        #                 "{ date }": (f"{st.session_state.proposal_data['proposal_date']}", -30, 0)
-        #             }
-        #             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_br:
-        #                 temp_br_path = temp_br.name
-        #             # temp_dir = tempfile.gettempdir()
-        #             # output_pdf = os.path.join(temp_dir, "modified_testimonials.pdf")
-        #             editor = EditTextFile(template_path)
-        #             editor.modify_pdf_fields(temp_br_path, modifications)
-        #
-        #             st.session_state.selected_br = temp_br_path
-        #             st.session_state.proposal_data["br_template"] = st.session_state.selected_br
-        #             try:
-        #                 br_num_pages = selected_br_template.get("num_pages")
-        #                 st.write(f"This BR template has {br_num_pages} page(s)")
-        #             except Exception as e:
-        #                 st.warning(f"⚠️ Could not read number of pages of Template: {str(e)}")
-        #                 st.stop()
-        #
-        #             specific_templates = get_specific_templates(all_templates, br_num_pages)
-        #
-        #             pdf_view(temp_br_path)
-        #         else:
-        #             st.error(f"Template file not found: {template_path}")
-        #     else:
-        #         st.error("Business requirement templates directory not found")
-        #     # pdf_view(br_options[selected_br_name])
 
         with st.form("proposal_form_step4"):
             if st.form_submit_button("Next: Preview Proposal"):
@@ -1712,40 +1767,45 @@ def handle_proposal():
 
         # st.divider()
         st.markdown("---")
+        st.write(f"**Client Name:** {st.session_state.proposal_data['client_name']}")
+        st.write(f"**Company:** {st.session_state.proposal_data['company_name']}")
+        st.write(f"**Email:** {st.session_state.proposal_data['email']}")
+        st.write(f"**Phone:** {st.session_state.proposal_data['phone']}")
+        st.write(f"**Country:** {st.session_state.proposal_data['country']}")
+        st.write(f"**Proposal Date:** {st.session_state.proposal_data['proposal_date']}")
+        file_upload_details = {
+            "client_name": st.session_state.proposal_data['client_name'],
+            "company_name": st.session_state.proposal_data['company_name'],
+            "email": st.session_state.proposal_data['email'],
+            "phone": st.session_state.proposal_data['phone'],
+            "country": st.session_state.proposal_data['country'],
+            "proposal_date": st.session_state.proposal_data['proposal_date'],
+            "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "upload_timestamp": firestore.SERVER_TIMESTAMP,
+        }
 
         # Download section
         st.markdown("#### ⬇️ Download Final Proposal")
         download_col1, download_col2 = st.columns([2, 1], gap="medium")
 
-        # query_params = st.experimental_get_query_params()
-        # upload_trigger = query_params.get("upload_trigger", ["0"])[0] == "1"
-        #
-        # with download_col1:
-        #     default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', ' ')} Proposal.pdf"
-        #
-        #     # generate_download_link("merged_output.pdf", default_filename, "PDF", "Proposal")
-        #     generate_download_link("merged_output.pdf", default_filename,
-        #                            "PDF", "Proposal")
-        #     if upload_trigger:
-        #         save_generated_file_to_firebase("merged_output.pdf", doc_type="Proposal", bucket=bucket)
-        #         # Reset trigger to prevent multiple uploads
-        #         st.experimental_set_query_params(upload_trigger="0")
         with download_col1:
             default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', '_')} Proposal.pdf"
 
             # Step 1: Confirm and upload
             if st.button("✅ Confirm and Upload Proposal"):
-                storage_path, public_url = save_generated_file_to_firebase("merged_output.pdf", doc_type="Proposal",
-                                                                           bucket=bucket)
+                # storage_path, public_url = save_generated_file_to_firebase("merged_output.pdf", doc_type="Proposal",
+                #                                                            bucket=bucket)
+                save_generated_file_to_firebase_2(
+                    "merged_output.pdf",
+                    "Proposal",
+                    bucket,
+                    "PDF",
+                    file_upload_details
+                )
+
                 st.success("Now you can download the file:")
                 # Step 2: Show download link only after upload
                 generate_download_link("merged_output.pdf", default_filename, "PDF", "Proposal")
-
-            # default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', ' ')} Proposal.pdf"
-            # generate_download_link("merged_output.pdf", default_filename,
-            #                        "PDF", "Proposal")
-            # save_generated_file_to_firebase("merged_output.pdf", doc_type="Proposal", bucket=bucket)
-
 
         with download_col2:
             if st.button("🔁 Start Over"):
@@ -1755,5 +1815,3 @@ def handle_proposal():
                     if key in st.session_state:
                         del st.session_state[key]
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
-
-
