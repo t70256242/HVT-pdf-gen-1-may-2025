@@ -125,7 +125,8 @@ def save_generated_file_to_firebase_2(
         file_details.update(
             {
                 "doc_type": doc_type,
-                "file_type": file_type
+                "file_type": file_type,
+                "storage_path": storage_path,
             }
         )
 
@@ -1613,16 +1614,21 @@ def handle_proposal():
 
             if os.path.exists(template_path):
                 the_name = st.session_state.proposal_data['client_name']
-                if len(the_name) >= 5:
-                    lenght_dif = len(the_name) - 5
-                    new_text = f"{space_ * lenght_dif}      {the_name}"
-                elif len(the_name) < 5:
-                    lenght_dif = 5 - len(the_name)
-                    new_text = f"{space_ * lenght_dif}      {the_name}"
+                if len(the_name) > 14:
+                    # lenght_dif = len(the_name) - 5
+                    # new_text = f"{space_ * lenght_dif}      {the_name}"
+                    new_text = the_name
+                elif len(the_name) < 14:
+                    if len(the_name) < 8:
+                        lenght_dif = 11 - len(the_name)
+                        new_text = f"{space_ * lenght_dif}{the_name}"
+                    else:
+                        lenght_dif = 14 - len(the_name)
+                        new_text = f"{space_ * lenght_dif}{the_name}"
                 else:
                     new_text = the_name
                 modifications = {
-                    "{ client_name }": (new_text, 0, 7),
+                    "{ client_name }": (f"{new_text}", 0, 7),
                     # "{ client_name }": (f"      {st.session_state.proposal_data['client_name']}", 0, 7),
                     # "{ client_name }": (
                     #     align_text_fixed_width(st.session_state.proposal_data['client_name'], 12, 'center'), 0, 7),

@@ -504,8 +504,15 @@ if selected_option == "Admin Panel":
                         st.markdown(
                             f"**Download:** [{template_data['original_name']}]({template_data['download_url']})")
 
-        #  History session
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Internship Offer", "NDA", "Invoice", "Contract", "Proposal", "Internship Positions"])
+
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+            ["Internship Offer",
+             "NDA",
+             "Invoice",
+             "Contract",
+             "Proposal",
+             "Internship Positions"
+             ])
 
         with tab1:
             show_templates_tab("Internship Offer")
@@ -524,74 +531,6 @@ if selected_option == "Admin Panel":
 
         with tab6:
             manage_internship_roles_tab()
-
-        # import os
-        # import tempfile
-        # import mimetypes
-        # import base64
-        #
-        # st.markdown("---")
-        # st.subheader("🗂️ Manage Generated Documents")
-        #
-        # selected_generated_type = st.selectbox(
-        #     "Select Document Type",
-        #     ["Internship Offer", "NDA", "Invoice", "Contract", "Proposal"],
-        #     key="generated_type_select"
-        # )
-        #
-        # generated_folder = f"hvt_generator/generated/{selected_generated_type}"
-        #
-        # try:
-        #     st.info(f"Loading generated files from: `{generated_folder}`")
-        #     blobs = list(bucket.list_blobs(prefix=generated_folder))
-        #
-        #     if blobs:
-        #         for blob in blobs:
-        #             file_name = os.path.basename(blob.name)
-        #             file_type, _ = mimetypes.guess_type(file_name)
-        #
-        #             # Save to a temporary file
-        #             with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_name)[-1]) as temp_file:
-        #                 blob.download_to_filename(temp_file.name)
-        #                 local_path = temp_file.name
-        #
-        #             col1, col2 = st.columns([6, 1])
-        #             with col1:
-        #                 st.markdown(f"📄 **{file_name}**")
-        #
-        #                 # Preview PDF
-        #                 if file_type == "application/pdf":
-        #                     st.markdown("Preview:")
-        #                     with open(local_path, "rb") as pdf_file:
-        #                         base64_pdf = base64.b64encode(pdf_file.read()).decode("utf-8")
-        #                         pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="400" type="application/pdf"></iframe>'
-        #                         st.markdown(pdf_display, unsafe_allow_html=True)
-        #
-        #                 # Preview DOCX
-        #                 elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        #                     st.markdown("Preview:")
-        #                     try:
-        #                         from docx import Document
-        #
-        #                         doc = Document(local_path)
-        #                         preview_text = "\n".join(
-        #                             para.text for para in doc.paragraphs if para.text.strip()
-        #                         )
-        #                         st.text_area("📄 DOCX Preview", preview_text, height=250)
-        #                     except Exception as e:
-        #                         st.warning(f"Couldn't preview DOCX: {e}")
-        #
-        #             with col2:
-        #                 if st.button("🗑 Delete", key=f"delete_{blob.name}"):
-        #                     try:
-        #                         blob.delete()
-        #                         st.success(f"Deleted {blob.name}")
-        #                         st.experimental_rerun()
-        #                     except Exception as e:
-        #                         st.error(f"Failed to delete: {str(e)}")
-        #
-        # except Exception as e:
-        #     st.error(f"Error listing files: {str(e)}")
 
 
 elif selected_option == "History" and st.session_state.get('is_admin', False):
@@ -621,6 +560,37 @@ elif selected_option == "History" and st.session_state.get('is_admin', False):
             st.warning(f"Couldn't generate PDF preview: {str(e)}")
 
 
+    from docx import Document
+
+
+    def docx_preview(docx_path, max_chars=3000):
+        """
+        Displays a simple preview of a .docx file by extracting and showing its text content.
+
+        Parameters:
+            docx_path (str): Path to the .docx file.
+            max_chars (int): Maximum number of characters to display.
+        """
+        try:
+            if not os.path.exists(docx_path):
+                st.error(f"File not found: {docx_path}")
+                return
+
+            doc = Document(docx_path)
+            text = '\n'.join([para.text for para in doc.paragraphs])
+
+            if not text.strip():
+                st.warning("The document appears to be empty.")
+            else:
+                preview_text = text[:max_chars] + (
+                    "..." if len(text) > max_chars else "")
+                st.subheader("📄 DOCX Preview")
+                st.code(preview_text, language='markdown')
+
+        except Exception as e:
+            st.error(f"Could not preview DOCX: {str(e)}")
+
+
     def display_documents_by_type(doc_type):
         try:
             # Query all documents and filter locally
@@ -642,42 +612,84 @@ elif selected_option == "History" and st.session_state.get('is_admin', False):
                 st.info(f"No generated {doc_type} documents found.")
                 return
 
+            import io  # for BytesIO
+
             for doc_id, data in filtered_docs:
                 with st.expander(
                         f"📄 {data.get('name', data.get('client_name', 'Unnamed Document'))} - {data.get('upload_date', '')}"):
                     col1, col2 = st.columns([3, 1])
 
+                    # Unique preview toggle key
+                    preview_key = f"preview_{doc_id}"
+                    if preview_key not in st.session_state:
+                        st.session_state[preview_key] = False
+
+                    # Container for the preview section
+                    preview_container = st.container()
+
+                    with col2:
+                        # Toggle preview button
+                        if st.button("👁️ Show/Hide Preview", key=f"toggle_{doc_id}"):
+                            st.session_state[preview_key] = not st.session_state[preview_key]
+
+                    temp_file_bytes = None  # Initialize to be used in download later
+
                     with col1:
-                        # Display metadata
                         st.subheader("Metadata")
                         st.json(data)
 
-                        # Display preview if available in storage
-                        if 'storage_path' in data and data.get('file_type') == 'application/pdf':
+                        # Only try preview if user toggled it
+                        if st.session_state[preview_key] and 'storage_path' in data:
+                            st.write(f"Attempting to preview: {data['storage_path']}")
                             try:
-                                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                                    blob = bucket.blob(data['storage_path'])
-                                    blob.download_to_filename(tmp_file.name)
-                                    pdf_view(tmp_file.name)
-                            except Exception as e:
-                                st.warning(f"Couldn't preview document: {str(e)}")
+                                _, ext = os.path.splitext(data['storage_path'])
+                                if ext.lower() not in ['.pdf', '.docx']:
+                                    ext = '.pdf'  # Default to PDF to be safe
+                                # Create a temporary file
+                                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_file:
+                                    tmp_path = tmp_file.name
+
+                                # Download the file from Firebase
+                                blob = bucket.blob(data['storage_path'])
+                                blob.download_to_filename(tmp_path)
+                                st.write(f"File downloaded to: {tmp_path}")
+
+                                # Save file contents to BytesIO for download reuse
+                                with open(tmp_path, "rb") as f:
+                                    temp_file_bytes = f.read()
+
+                                # Preview PDF
+                                if os.path.exists(tmp_path):
+                                    st.write("File exists, attempting preview...")
+                                    if tmp_path.endswith('.pdf'):
+                                        pdf_view(tmp_path)
+                                    elif tmp_path.endswith('.docx'):
+                                        with tempfile.NamedTemporaryFile(suffix="pdf", delete=False) as pdf_tmp_file:
+                                            pdf_tmp_path = pdf_tmp_file.name
+                                            main_converter(tmp_path, pdf_tmp_path)
+                                            pdf_view(pdf_tmp_file)
+                                else:
+                                    st.error("Downloaded file not found!")
+
+                                os.unlink(tmp_path)
+
+                            except Exception as download_error:
+                                st.error(f"Download/preview failed: {str(download_error)}")
+                                if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                                    os.unlink(tmp_path)
 
                     with col2:
-                        # Download button if storage_path exists
-                        if 'storage_path' in data:
-                            try:
-                                blob = bucket.blob(data['storage_path'])
-                                file_bytes = blob.download_as_bytes()
-
-                                st.download_button(
-                                    label="⬇️ Download",
-                                    data=file_bytes,
-                                    file_name=data.get('name', 'document'),
-                                    mime=data.get('file_type', 'application/octet-stream'),
-                                    key=f"download_{doc_id}"
-                                )
-                            except Exception as e:
-                                st.error(f"Download failed: {str(e)}")
+                        # Download button using previously downloaded file
+                        if temp_file_bytes:
+                            st.download_button(
+                                label="⬇️ Download",
+                                data=temp_file_bytes,
+                                file_name=data.get('name', 'document'),
+                                mime=data.get('file_type', 'application/pdf'),
+                                key=f"download_{doc_id}"
+                            )
+                        else:
+                            st.caption("Preview to enable download.")
 
                         # Delete button
                         if st.button("🗑️ Delete", key=f"delete_{doc_id}"):
@@ -695,7 +707,7 @@ elif selected_option == "History" and st.session_state.get('is_admin', False):
                             except Exception as e:
                                 st.error(f"Error deleting document: {str(e)}")
 
-                        # Show additional info if available
+                        # Optional extra info
                         if 'client_name' in data:
                             st.caption(f"Client: {data['client_name']}")
 
