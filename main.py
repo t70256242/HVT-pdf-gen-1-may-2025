@@ -538,7 +538,7 @@ elif selected_option == "History" and st.session_state.get('is_admin', False):
 
     # Create tabs for each document type
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Internship Offer",
+        "Internship",
         "NDA",
         "Invoice",
         "Contract",
@@ -716,7 +716,7 @@ elif selected_option == "History" and st.session_state.get('is_admin', False):
 
 
     with tab1:
-        display_documents_by_type("Internship Offer")
+        display_documents_by_type("Internship")
 
     with tab2:
         display_documents_by_type("NDA")
