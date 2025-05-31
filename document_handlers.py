@@ -20,7 +20,7 @@ from invoice_editor import invoice_edit
 from testimonial_page_edit import EditTextFile
 import re
 
-LOAD_LOCALLY = True
+LOAD_LOCALLY = False
 
 
 def format_currency_amount(raw_price: str) -> str:
@@ -1497,7 +1497,20 @@ def handle_proposal():
             st.error("No valid cover templates available. Cannot proceed.")
             st.stop()
 
-        col1, col2 = st.columns([1, 2])
+        st.markdown("""
+            <style>
+                div[data-baseweb="select"] > div {
+                    width: 100% !important;
+                }
+
+                .custom-select-container {
+                    max-width: 600px;
+                    margin-bottom: 1rem;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        col1, col2 = st.columns([3, 1])
 
         with col1:
 

@@ -15,7 +15,7 @@ from docx_pdf_converter import main_converter
 
 load_dotenv()
 
-LOAD_LOCALLY = True
+LOAD_LOCALLY = False
 
 # import os
 # import json
