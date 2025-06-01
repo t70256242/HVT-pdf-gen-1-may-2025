@@ -1389,6 +1389,83 @@ def get_proposal_template_details(firestore_db):
     return all_templates
 
 
+import os
+import tempfile
+
+def fetch_and_prepare_proposal_templates(firestore_db, bucket):
+    base_temp_dir = tempfile.mkdtemp(prefix="proposal_templates_")
+
+    section_map = {
+        "cover_page": "Cover Page",
+        "table_of_contents": "Table of Contents",
+        "business_requirement": "Business Requirement",
+        "page_3_6": "Page 3 to 6",
+        "testimonials": "Testimonials"
+    }
+
+    folder_paths = {}
+    downloaded_templates = []
+
+    for section_key, section_label in section_map.items():
+        target_dir = os.path.join(base_temp_dir, section_key)
+        os.makedirs(target_dir, exist_ok=True)
+        folder_paths[section_key] = target_dir
+
+        try:
+            templates_ref = firestore_db.collection("hvt_generator").document("Proposal").collection(section_key)
+            templates = templates_ref.stream()
+
+            for doc in templates:
+                data = doc.to_dict()
+                if not data or not data.get("storage_path"):
+                    continue
+
+                filename = data.get("original_name", doc.id)
+                if not filename.lower().endswith(".pdf"):
+                    filename += ".pdf"
+
+                target_path = os.path.join(target_dir, filename)
+
+                try:
+                    blob = bucket.blob(data["storage_path"])
+                    blob.download_to_filename(target_path)
+
+                    # If successful, add file details to downloaded_templates
+                    file_details = {
+                        "name": data.get("name"),
+                        "original_name": data.get("original_name"),
+                        "doc_type": data.get("doc_type", "Proposal"),
+                        "file_type": data.get("file_type"),
+                        "size_kb": data.get("size_kb"),
+                        "size_bytes": data.get("size_bytes"),
+                        "upload_date": data.get("upload_date"),
+                        "upload_timestamp": data.get("upload_timestamp"),
+                        "download_url": data.get("download_url"),
+                        "storage_path": data.get("storage_path"),
+                        "visibility": data.get("visibility"),
+                        "description": data.get("description"),
+                        "order_number": data.get("order_number"),
+                        "is_active": data.get("is_active", True),
+                        "template_part": data.get("template_part"),
+                        "proposal_section_type": data.get("proposal_section_type", section_key),
+                        "pdf_name": data.get("pdf_name"),
+                        "num_pages": data.get("num_pages"),
+                        "section_key": section_key,
+                        "document_id": doc.id,
+                        "local_path": target_path  # Include the actual downloaded file path
+                    }
+
+                    downloaded_templates.append(file_details)
+
+                except Exception as e:
+                    print(f"❌ Failed to download {data['storage_path']}: {e}")
+
+        except Exception as e:
+            print(f"⚠️ Failed to fetch templates from section {section_key}: {e}")
+
+    return folder_paths, downloaded_templates
+
+
 def get_specific_templates(all_templates, number_of_pages):
     # Filter for table_of_contents and testimonials with exactly 8 pages
     filtered_templates = [
@@ -1432,9 +1509,11 @@ def handle_proposal():
     st.session_state.setdefault("proposal_form_step", 1)
     space_ = " "
 
-    all_templates = get_proposal_template_details(firestore_db)
-    folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+    # all_templates = get_proposal_template_details(firestore_db)
+    # folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
+    folder_paths, all_templates = fetch_and_prepare_proposal_templates(firestore_db, bucket)
 
+    print("here----------")
     # Step 1: Basic Information
     if st.session_state.proposal_form_step == 1:
         with st.form("proposal_form_step1"):
