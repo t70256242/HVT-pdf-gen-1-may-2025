@@ -1432,14 +1432,6 @@ def handle_proposal():
     st.session_state.setdefault("proposal_form_step", 1)
     space_ = " "
 
-    # if 'proposal_data' not in st.session_state:
-    #     st.session_state.proposal_data = {}
-    #
-    # # Initialize session state for multi-page form
-    # if 'proposal_form_step' not in st.session_state:
-    #     st.session_state.proposal_form_step = 1
-    # st.session_state.proposal_data = {}
-
     all_templates = get_proposal_template_details(firestore_db)
     folder_paths = fetch_proposal_templates_to_temp_dir(firestore_db, bucket)
 
@@ -1465,19 +1457,10 @@ def handle_proposal():
                     "proposal_date": proposal_date.strftime("%B %d, %Y")
                 }
                 if not st.session_state.proposal_data:
-                    print("Proposal data not available")
                     # st.write("Proposal data not available")
                     st.error("Proposal data not available")
                 else:
 
-                    # st.session_state.proposal_data = {
-                    #     "client_name": name,
-                    #     "company_name": company,
-                    #     "email": email,
-                    #     "phone": phone,
-                    #     "country": country,
-                    #     "proposal_date": proposal_date.strftime("%B %d, %Y")
-                    # }
                     st.session_state.proposal_form_step = 2
                 st.experimental_rerun() if LOAD_LOCALLY else st.rerun()
 
@@ -1531,26 +1514,12 @@ def handle_proposal():
             # Ensure output path is valid in Streamlit Cloud
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_img:
                 temp_img_path = temp_img.name
-            # temp_dir = tempfile.gettempdir()
-            # output_pdf = os.path.join(temp_dir, "modified_cover.pdf")
-
-            # pdf_editor = EditTextFile(template_path)
-            #
-            # modifications = {
-            #     "Name :": f": {st.session_state.proposal_data['client_name']}",
-            #     "Email :": f": {st.session_state.proposal_data['email']}",
-            #     "Phone :": f": {st.session_state.proposal_data['phone']}",
-            #     "Country: ": f": {st.session_state.proposal_data['country']}",
-            #     "Date": f"{st.session_state.proposal_data['proposal_date']}"
-            # }
 
             replace_pdf_placeholders(
                 input_path=template_path,
                 output_path=temp_img_path,
                 replacements={
                     "{ client_name }": f"{st.session_state.proposal_data['client_name']}",
-                    # "{ client_name }": (
-                    #     align_text_fixed_width(st.session_state.proposal_data['client_name'], 12, 'center'), 0, 7),
                     "{ client_email }": f"{st.session_state.proposal_data['email']}",
                     "{ client_phone }": f"{st.session_state.proposal_data['phone']}",
                     "{ client_country }": f"{st.session_state.proposal_data['country']}",
@@ -1558,10 +1527,6 @@ def handle_proposal():
                 },
                 y_offset=20
             )
-
-            # print(f"modifications: {modifications}")
-            #
-            # pdf_editor.modify_pdf_fields(temp_img_path, modifications, 8)
 
             # Preview
             if os.path.exists(temp_img_path):
@@ -1603,7 +1568,7 @@ def handle_proposal():
         else:
             initial_br = 0
 
-        col1, col2 = st.columns([1, 2])
+        col1, col2 = st.columns([4, 1])
 
         with col1:
 
@@ -1615,6 +1580,20 @@ def handle_proposal():
             )
 
             selected_br_template = br_options[selected_br_name]
+            st.subheader("Template Details")
+            st.json({
+                "Name": selected_br_template["name"],
+                "Original Name": selected_br_template["original_name"],
+                "File Type": selected_br_template["file_type"],
+                "Size (KB)": selected_br_template["size_kb"],
+                "Upload Date": selected_br_template["upload_date"],
+                "Pages": selected_br_template["num_pages"],
+                "Description": selected_br_template["description"],
+                "Order Number": selected_br_template["order_number"],
+                "Active": selected_br_template["is_active"]
+            })
+            if "br_original_name" not in st.session_state:
+                st.session_state["br_original_name"] = selected_br_template["original_name"]
             # st.session_state.selected_br = selected_br_name
         br_temp_dir = folder_paths.get("business_requirement")
         if br_temp_dir:
@@ -1628,8 +1607,6 @@ def handle_proposal():
             if os.path.exists(template_path):
                 the_name = st.session_state.proposal_data['client_name']
                 if len(the_name) > 14:
-                    # lenght_dif = len(the_name) - 5
-                    # new_text = f"{space_ * lenght_dif}      {the_name}"
                     new_text = the_name
                 elif len(the_name) < 14:
                     if len(the_name) < 8:
@@ -1642,15 +1619,10 @@ def handle_proposal():
                     new_text = the_name
                 modifications = {
                     "{ client_name }": (f"{new_text}", 0, 7),
-                    # "{ client_name }": (f"      {st.session_state.proposal_data['client_name']}", 0, 7),
-                    # "{ client_name }": (
-                    #     align_text_fixed_width(st.session_state.proposal_data['client_name'], 12, 'center'), 0, 7),
                     "{ date }": (f"{st.session_state.proposal_data['proposal_date']}", -30, 0)
                 }
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_br:
                     temp_br_path = temp_br.name
-                # temp_dir = tempfile.gettempdir()
-                # output_pdf = os.path.join(temp_dir, "modified_testimonials.pdf")
                 editor = EditTextFile(template_path)
                 editor.modify_pdf_fields(temp_br_path, modifications)
 
@@ -1658,7 +1630,7 @@ def handle_proposal():
                 st.session_state.proposal_data["br_template"] = st.session_state.selected_br
                 try:
                     br_num_pages = selected_br_template.get("num_pages")
-                    st.write(f"This BR template has {br_num_pages} page(s)")
+                    # st.write(f"This BR template has {br_num_pages} page(s)")
                 except Exception as e:
                     st.warning(f"⚠️ Could not read number of pages of Template: {str(e)}")
                     st.stop()
@@ -1734,7 +1706,6 @@ def handle_proposal():
                     st.info("Testimonial Template for the selected BR page count is unavailable.")
 
                 for file_path in merger_files:
-                    print(file_path)
                     if file_path is None:
                         continue
                     if not os.path.exists(file_path):
@@ -1808,7 +1779,8 @@ def handle_proposal():
         download_col1, download_col2 = st.columns([2, 1], gap="medium")
 
         with download_col1:
-            default_filename = f"{st.session_state.proposal_data['client_name'].replace(' ', '_')} Proposal.pdf"
+            default_filename = (f""
+                                f"{st.session_state.proposal_data['client_name'].replace('_', ' ')} - {st.session_state.br_original_name.replace('+', ' ').split('.pdf')[0]} Proposal - {st.session_state.proposal_data['proposal_date']}.pdf")
 
             # Step 1: Confirm and upload
             if st.button("✅ Confirm and Upload Proposal"):
